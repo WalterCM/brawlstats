@@ -9,20 +9,12 @@ function App() {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const [profiles, setProfiles] = useState(() => {
-    const saved = localStorage.getItem('brawl_profiles');
-    return saved ? JSON.parse(saved) : [];
-  });
-
   const [me, setMe] = useState(null);
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [authError, setAuthError] = useState('');
-
-  const [newProfileName, setNewProfileName] = useState('');
-  const [newProfilePassword, setNewProfilePassword] = useState('');
-  const [showProfileCreator, setShowProfileCreator] = useState(false);
+  const [currentView, setCurrentView] = useState('menu'); // 'menu' or 'draft'
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
   // Connection State
@@ -58,15 +50,11 @@ function App() {
   const [myBrawler, setMyBrawler] = useState(null);
   const [opponentPerceptions, setOpponentPerceptions] = useState({});
 
-  // Sync profiles list to localStorage
-  useEffect(() => {
-    localStorage.setItem('brawl_profiles', JSON.stringify(profiles));
-  }, [profiles]);
-
   // Load catalogs and stats whenever active user changes
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('brawl_active_user', JSON.stringify(currentUser));
+      setCurrentView('menu');
       loadCatalogs();
     } else {
       localStorage.removeItem('brawl_active_user');
@@ -159,13 +147,6 @@ function App() {
 
       const userSession = { id: data.token, token: data.token, name: data.username };
       
-      // Update local profiles list
-      const updatedProfiles = [
-        ...profiles.filter(p => p.name.toLowerCase() !== username.toLowerCase()),
-        userSession
-      ];
-      setProfiles(updatedProfiles);
-      
       setGlobalActiveUser(data.token, data.username);
       setCurrentUser(userSession);
       
@@ -178,44 +159,11 @@ function App() {
     }
   };
 
-  const handleProfileSelect = (prof) => {
-    setGlobalActiveUser(prof.token, prof.name);
-    setCurrentUser(prof);
-    setShowProfileDropdown(false);
-    resetDraft();
-  };
-
-  const handleCreateProfile = async (e) => {
-    e.preventDefault();
-    setAuthError('');
-    if (!newProfileName.trim() || !newProfilePassword) return;
-
-    const name = newProfileName.trim();
-    try {
-      const data = await api.register(name, newProfilePassword);
-      const userSession = { id: data.token, token: data.token, name: data.username };
-      
-      const updatedProfiles = [
-        ...profiles.filter(p => p.name.toLowerCase() !== name.toLowerCase()),
-        userSession
-      ];
-      setProfiles(updatedProfiles);
-      
-      setGlobalActiveUser(data.token, data.username);
-      setCurrentUser(userSession);
-      
-      setNewProfileName('');
-      setNewProfilePassword('');
-      setShowProfileCreator(false);
-    } catch (err) {
-      alert(err.message || 'Failed to create profile');
-    }
-  };
-
   const handleLogout = () => {
     setGlobalActiveUser('', '');
     setCurrentUser(null);
     setShowProfileDropdown(false);
+    setCurrentView('menu');
     resetDraft();
   };
 
@@ -374,8 +322,8 @@ function App() {
     return (
       <div className="login-screen">
         <div className="login-card glass-panel">
-          <h1>BRAWL STARS</h1>
-          <p className="subtitle">Ranked Draft Assistant</p>
+          <h1>BRAWL STATS</h1>
+          <p className="subtitle">Game Hub & Analytics</p>
           
           <form onSubmit={handleLoginSubmit} className="login-form">
             {authError && <div className="auth-error-banner">{authError}</div>}
@@ -423,23 +371,6 @@ function App() {
               {isRegisterMode ? 'Already have an account? Sign In' : "Don't have an account? Register Profile"}
             </button>
           </form>
-
-          {profiles.length > 0 && (
-            <div className="existing-profiles">
-              <h3>Or select saved profile session:</h3>
-              <div className="profiles-grid">
-                {profiles.map(p => (
-                  <button 
-                    key={p.id} 
-                    className="btn btn-profile-select"
-                    onClick={() => handleProfileSelect(p)}
-                  >
-                    👤 {p.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     );
@@ -460,54 +391,48 @@ function App() {
       {/* Header */}
       <header className="app-header glass-panel">
         <div className="logo-section">
-          <h1>BRAWL STARS</h1>
-          <p className="subtitle">Ranked Draft Assistant</p>
+          <h1>BRAWL STATS</h1>
+          <p className="subtitle">Game Hub & Analytics</p>
         </div>
 
-        {/* Dynamic User Profile Selector */}
-        <div className="profile-selector-menu">
-          <button 
-            className="btn btn-profile-trigger" 
-            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-          >
-            👤 Player: <strong>{me?.name || currentUser.name}</strong> ▾
-          </button>
-          
-          {showProfileDropdown && (
-            <div className="profile-dropdown-menu glass-panel">
-              <div className="dropdown-title">Select Account</div>
-              {profiles.map(p => (
-                <button 
-                  key={p.id} 
-                  className={`dropdown-item ${currentUser.id === p.id ? 'active' : ''}`}
-                  onClick={() => handleProfileSelect(p)}
-                >
-                  {p.name}
-                </button>
-              ))}
-              <div className="dropdown-divider"></div>
-              <button 
-                className="dropdown-item add-profile-btn"
-                onClick={() => {
-                  setShowProfileCreator(true);
-                  setShowProfileDropdown(false);
-                }}
-              >
-                + Add Profile
-              </button>
-              <button 
-                className="dropdown-item logout-btn"
-                onClick={handleLogout}
-              >
-                🚪 Log Out
-              </button>
-            </div>
+        <div className="header-actions-group" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+          {currentView === 'draft' && (
+            <button className="btn btn-secondary" onClick={() => setCurrentView('menu')}>
+              ◀ Exit Draft Tool
+            </button>
           )}
+
+          {/* Dynamic User Profile Selector */}
+          <div className="profile-selector-menu">
+            <button 
+              className="btn btn-profile-trigger" 
+              onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+            >
+              👤 Player: <strong>{me?.name || currentUser.name}</strong> ▾
+            </button>
+            
+            {showProfileDropdown && (
+              <div className="profile-dropdown-menu glass-panel">
+                <div className="dropdown-title">Session</div>
+                <div style={{ padding: '8px 15px', fontSize: '12px', color: 'var(--color-text-muted)' }}>
+                  Logged in as <strong>{me?.name || currentUser.name}</strong>
+                </div>
+                <div className="dropdown-divider"></div>
+                <button 
+                  className="dropdown-item logout-btn"
+                  onClick={handleLogout}
+                >
+                  🚪 Log Out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* Main Grid */}
-      <div className="main-grid">
+      {/* Main Grid / Dashboard Hub */}
+      {currentView === 'draft' ? (
+        <div className="main-grid">
 
         {/* Left Panel: History & Perceptions */}
         <section className="left-panel glass-panel">
@@ -764,55 +689,26 @@ function App() {
           </div>
         </section>
       </div>
-
-      {/* Profile Creator Modal */}
-      {showProfileCreator && (
-        <div className="modal-backdrop">
-          <form className="modal-content glass-panel" onSubmit={handleCreateProfile}>
-            <h2>Register New Django Player</h2>
+      ) : (
+        <div className="welcome-menu-container">
+          <div className="welcome-card glass-panel">
+            <h2>Welcome, {me?.name || currentUser.name}!</h2>
+            <p className="welcome-subtitle">Brawl Stats Game Hub</p>
             
-            <div className="modal-form-group">
-              <label htmlFor="new-prof-name">Username:</label>
-              <input 
-                id="new-prof-name"
-                type="text" 
-                placeholder="e.g. Player1, DraftKing" 
-                value={newProfileName}
-                onChange={(e) => setNewProfileName(e.target.value)}
-                className="search-input"
-                required
-                autoFocus
-              />
-            </div>
-
-            <div className="modal-form-group">
-              <label htmlFor="new-prof-pass">Password:</label>
-              <input 
-                id="new-prof-pass"
-                type="password" 
-                placeholder="••••••••" 
-                value={newProfilePassword}
-                onChange={(e) => setNewProfilePassword(e.target.value)}
-                className="search-input"
-                required
-              />
-            </div>
-
-            <div className="modal-actions">
-              <button type="button" className="btn" onClick={() => {
-                setShowProfileCreator(false);
-                setNewProfileName('');
-                setNewProfilePassword('');
-              }}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary">
-                Register & Login
+            <div className="menu-options-grid">
+              <button className="menu-card btn-enter-draft" onClick={() => setCurrentView('draft')} style={{ width: '100%' }}>
+                <div className="menu-card-icon">🎮</div>
+                <div className="menu-card-details">
+                  <h3>Enter Draft Assistant</h3>
+                  <p>Start a new draft session with real-time picks, bans, and counter calculations.</p>
+                </div>
               </button>
             </div>
-          </form>
+          </div>
         </div>
       )}
+
+
 
       {/* Post-Game Logger Modal */}
       {showMatchLogger && (
