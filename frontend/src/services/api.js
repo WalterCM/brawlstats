@@ -1,14 +1,21 @@
 const API_BASE_URL = 'http://localhost:8000/api';
 
-// Simple state to store the active user metadata locally
+// State to store the active user metadata locally
 let activeUser = {
-  id: 'walter-supabase-uid-999',
-  name: 'Walter'
+  token: localStorage.getItem('django_auth_token') || '',
+  name: localStorage.getItem('django_auth_username') || ''
 };
 
-export const setGlobalActiveUser = (id, name) => {
-  activeUser.id = id;
+export const setGlobalActiveUser = (token, name) => {
+  activeUser.token = token;
   activeUser.name = name;
+  if (token) {
+    localStorage.setItem('django_auth_token', token);
+    localStorage.setItem('django_auth_username', name);
+  } else {
+    localStorage.removeItem('django_auth_token');
+    localStorage.removeItem('django_auth_username');
+  }
 };
 
 export const getGlobalActiveUser = () => {
@@ -16,11 +23,13 @@ export const getGlobalActiveUser = () => {
 };
 
 const getAuthHeaders = () => {
-  return {
-    'Content-Type': 'application/json',
-    'X-Supabase-User-Id': activeUser.id,
-    'X-Supabase-User-Name': activeUser.name
+  const headers = {
+    'Content-Type': 'application/json'
   };
+  if (activeUser.token) {
+    headers['Authorization'] = `Token ${activeUser.token}`;
+  }
+  return headers;
 };
 
 export const api = {
@@ -109,6 +118,34 @@ export const api = {
       headers: getAuthHeaders()
     });
     if (!res.ok) throw new Error('Failed to fetch perceptions');
+    return res.json();
+  },
+
+  // Authenticate with Django User backend
+  async login(username, password) {
+    const res = await fetch(`${API_BASE_URL}/auth/login/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Invalid credentials');
+    }
+    return res.json();
+  },
+
+  // Register a new Django User
+  async register(username, password) {
+    const res = await fetch(`${API_BASE_URL}/auth/register/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Failed to register');
+    }
     return res.json();
   }
 };

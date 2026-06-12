@@ -4,8 +4,29 @@ import './App.css';
 
 function App() {
   // Authentication & Users
-  const [currentUser, setCurrentUser] = useState({ id: 'walter-supabase-uid-999', name: 'Walter' });
+  const [currentUser, setCurrentUser] = useState(() => {
+    const saved = localStorage.getItem('brawl_active_user');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [profiles, setProfiles] = useState(() => {
+    const saved = localStorage.getItem('brawl_profiles');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [me, setMe] = useState(null);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [authError, setAuthError] = useState('');
+
+  const [newProfileName, setNewProfileName] = useState('');
+  const [newProfilePassword, setNewProfilePassword] = useState('');
+  const [showProfileCreator, setShowProfileCreator] = useState(false);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+
+  // Connection State
+  const [backendConnected, setBackendConnected] = useState(true);
 
   // Catalogs
   const [brawlers, setBrawlers] = useState([]);
@@ -30,31 +51,45 @@ function App() {
 
   const [activeSlot, setActiveSlot] = useState({ type: 'allies_banned', index: 0 });
   const [suggestions, setSuggestions] = useState([]);
-  
+
   // Post match Logger Modal State
   const [showMatchLogger, setShowMatchLogger] = useState(false);
   const [matchResult, setMatchResult] = useState('victory');
   const [myBrawler, setMyBrawler] = useState(null);
-  const [opponentPerceptions, setOpponentPerceptions] = useState({}); // { enemy_brawler_id: value }
+  const [opponentPerceptions, setOpponentPerceptions] = useState({});
 
-  // Load catalogs on init
+  // Sync profiles list to localStorage
   useEffect(() => {
-    loadCatalogs();
+    localStorage.setItem('brawl_profiles', JSON.stringify(profiles));
+  }, [profiles]);
+
+  // Load catalogs and stats whenever active user changes
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('brawl_active_user', JSON.stringify(currentUser));
+      loadCatalogs();
+    } else {
+      localStorage.removeItem('brawl_active_user');
+      setMe(null);
+      setMatches([]);
+      setPerceptions([]);
+    }
   }, [currentUser]);
 
   // Load recommendations whenever draft selections or map changes
   useEffect(() => {
-    if (selectedMap) {
+    if (selectedMap && currentUser && backendConnected) {
       loadSuggestions();
     } else {
       setSuggestions([]);
     }
-  }, [draft, selectedMap]);
+  }, [draft, selectedMap, currentUser, backendConnected]);
 
   const loadCatalogs = async () => {
+    if (!currentUser) return;
     try {
-      setGlobalActiveUser(currentUser.id, currentUser.name);
-      
+      setGlobalActiveUser(currentUser.token, currentUser.name);
+
       // Load user details
       const playerProfile = await api.fetchMe();
       setMe(playerProfile);
@@ -63,16 +98,17 @@ function App() {
       const brawlerList = await api.fetchBrawlers();
       setBrawlers(brawlerList);
 
-      const mapList = await api.fetchMaps(true); // Fetch ranked maps
+      const mapList = await api.fetchMaps(true);
       setMaps(mapList);
-      if (mapList.length > 0 && !selectedMap) {
+      if (mapList.length > 0) {
         setSelectedMap(mapList[0]);
       }
 
-      // Load user statistics & perceptions
+      setBackendConnected(true);
       loadUserStats();
     } catch (err) {
       console.error("Error loading catalogs:", err);
+      setBackendConnected(false);
     }
   };
 
@@ -107,8 +143,80 @@ function App() {
     }
   };
 
-  const switchUser = (id, name) => {
-    setCurrentUser({ id, name });
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (!loginUsername.trim() || !loginPassword) return;
+
+    const username = loginUsername.trim();
+    try {
+      let data;
+      if (isRegisterMode) {
+        data = await api.register(username, loginPassword);
+      } else {
+        data = await api.login(username, loginPassword);
+      }
+
+      const userSession = { id: data.token, token: data.token, name: data.username };
+      
+      // Update local profiles list
+      const updatedProfiles = [
+        ...profiles.filter(p => p.name.toLowerCase() !== username.toLowerCase()),
+        userSession
+      ];
+      setProfiles(updatedProfiles);
+      
+      setGlobalActiveUser(data.token, data.username);
+      setCurrentUser(userSession);
+      
+      // Reset forms
+      setLoginUsername('');
+      setLoginPassword('');
+      setIsRegisterMode(false);
+    } catch (err) {
+      setAuthError(err.message || 'Authentication failed');
+    }
+  };
+
+  const handleProfileSelect = (prof) => {
+    setGlobalActiveUser(prof.token, prof.name);
+    setCurrentUser(prof);
+    setShowProfileDropdown(false);
+    resetDraft();
+  };
+
+  const handleCreateProfile = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    if (!newProfileName.trim() || !newProfilePassword) return;
+
+    const name = newProfileName.trim();
+    try {
+      const data = await api.register(name, newProfilePassword);
+      const userSession = { id: data.token, token: data.token, name: data.username };
+      
+      const updatedProfiles = [
+        ...profiles.filter(p => p.name.toLowerCase() !== name.toLowerCase()),
+        userSession
+      ];
+      setProfiles(updatedProfiles);
+      
+      setGlobalActiveUser(data.token, data.username);
+      setCurrentUser(userSession);
+      
+      setNewProfileName('');
+      setNewProfilePassword('');
+      setShowProfileCreator(false);
+    } catch (err) {
+      alert(err.message || 'Failed to create profile');
+    }
+  };
+
+  const handleLogout = () => {
+    setGlobalActiveUser('', '');
+    setCurrentUser(null);
+    setShowProfileDropdown(false);
+    resetDraft();
   };
 
   const handleMapChange = (e) => {
@@ -119,12 +227,10 @@ function App() {
     }
   };
 
-  // Click on a draft slot to set it active
   const selectSlot = (type, index) => {
     setActiveSlot({ type, index });
   };
 
-  // Remove brawler from draft slot
   const clearSlot = (type, index, e) => {
     e.stopPropagation();
     const list = [...draft[type]];
@@ -132,9 +238,7 @@ function App() {
     setDraft({ ...draft, [type]: list });
   };
 
-  // Click on a catalog brawler to place it in the active slot
   const placeBrawler = (brawler) => {
-    // Check if brawler is already picked or banned in other slots
     const isUsed = [
       ...draft.allies_banned,
       ...draft.enemies_banned,
@@ -142,15 +246,13 @@ function App() {
       ...draft.enemies_picked
     ].some(b => b && b.id === brawler.id);
 
-    if (isUsed) return; // Ignore if already used
+    if (isUsed) return;
 
     const list = [...draft[activeSlot.type]];
     list[activeSlot.index] = brawler;
-    
+
     const newDraft = { ...draft, [activeSlot.type]: list };
     setDraft(newDraft);
-
-    // Auto-advance slot logically
     advanceSlot(activeSlot.type, activeSlot.index, newDraft);
   };
 
@@ -172,13 +274,12 @@ function App() {
       nextIndex = 0;
     }
 
-    // Find first empty slot in that sequence or subsequent sequences
     let found = false;
     for (let s = 0; s < sequence.length; s++) {
       const checkSeq = sequence[(currentSeqIdx + s) % sequence.length];
       const checkType = checkSeq.type;
       const startIndex = (s === 0) ? nextIndex : 0;
-      
+
       for (let i = startIndex; i < checkSeq.count; i++) {
         if (!currentDraft[checkType][i]) {
           setActiveSlot({ type: checkType, index: i });
@@ -201,15 +302,13 @@ function App() {
   };
 
   const openLogMatch = () => {
-    // Default my_brawler to the first allied pick if available
     const myPick = draft.allies_picked.find(Boolean) || null;
     setMyBrawler(myPick);
 
-    // Filter enemy brawlers to rate
     const enemies = draft.enemies_picked.filter(Boolean);
     const initialPerceptions = {};
     enemies.forEach(enemy => {
-      initialPerceptions[enemy.id] = 0; // default to neutral
+      initialPerceptions[enemy.id] = 0;
     });
     setOpponentPerceptions(initialPerceptions);
     setShowMatchLogger(true);
@@ -227,7 +326,6 @@ function App() {
         draft_events: []
       };
 
-      // Populate draft events sequentially
       let order = 1;
       const addEvents = (list, type, team) => {
         list.forEach(b => {
@@ -247,15 +345,12 @@ function App() {
       addEvents(draft.allies_picked, 'pick', 'allied');
       addEvents(draft.enemies_picked, 'pick', 'enemy');
 
-      // 1. Save match logs
       await api.saveMatch(matchPayload);
 
-      // 2. Save perceptions for enemy brawlers faced
       for (const [enemyId, ratingVal] of Object.entries(opponentPerceptions)) {
         await api.savePerception(myBrawler.id, enemyId, ratingVal);
       }
 
-      // Cleanup
       setShowMatchLogger(false);
       resetDraft();
       loadUserStats();
@@ -266,7 +361,6 @@ function App() {
     }
   };
 
-  // Filtering Catalog Brawlers
   const filteredBrawlers = brawlers.filter(b => {
     const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesClass = selectedClass === 'All' || b.class_name === selectedClass;
@@ -275,42 +369,150 @@ function App() {
 
   const brawlerClasses = ['All', 'Damage Dealer', 'Tank', 'Marksman', 'Assassin', 'Support', 'Controller', 'Artillery'];
 
+  // Auth Guard
+  if (!currentUser) {
+    return (
+      <div className="login-screen">
+        <div className="login-card glass-panel">
+          <h1>BRAWL STARS</h1>
+          <p className="subtitle">Ranked Draft Assistant</p>
+          
+          <form onSubmit={handleLoginSubmit} className="login-form">
+            {authError && <div className="auth-error-banner">{authError}</div>}
+            
+            <div className="form-group">
+              <label htmlFor="username-input">Player Username:</label>
+              <input 
+                id="username-input"
+                type="text" 
+                placeholder="e.g. Player1, DraftKing" 
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
+                className="search-input"
+                required
+                autoFocus
+              />
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="password-input">Password:</label>
+              <input 
+                id="password-input"
+                type="password" 
+                placeholder="••••••••" 
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="search-input"
+                required
+              />
+            </div>
+
+            <button type="submit" className="btn btn-primary login-btn">
+              {isRegisterMode ? 'Create Account & Enter' : 'Sign In & Enter'}
+            </button>
+
+            <button 
+              type="button" 
+              className="btn-link-toggle"
+              onClick={() => {
+                setIsRegisterMode(!isRegisterMode);
+                setAuthError('');
+              }}
+              style={{ background: 'none', border: 'none', color: 'var(--color-ally)', cursor: 'pointer', fontSize: '12px', marginTop: '5px', textDecoration: 'underline' }}
+            >
+              {isRegisterMode ? 'Already have an account? Sign In' : "Don't have an account? Register Profile"}
+            </button>
+          </form>
+
+          {profiles.length > 0 && (
+            <div className="existing-profiles">
+              <h3>Or select saved profile session:</h3>
+              <div className="profiles-grid">
+                {profiles.map(p => (
+                  <button 
+                    key={p.id} 
+                    className="btn btn-profile-select"
+                    onClick={() => handleProfileSelect(p)}
+                  >
+                    👤 {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-container">
+      {/* Backend connection failure banner */}
+      {!backendConnected && (
+        <div className="connection-error-banner pulse glow-enemy">
+          ⚠️ Cannot connect to backend server. Please verify Django is running at http://localhost:8000/
+          <button className="btn btn-sm btn-primary" onClick={loadCatalogs} style={{ marginLeft: '15px' }}>
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <header className="app-header glass-panel">
         <div className="logo-section">
           <h1>BRAWL STARS</h1>
-          <p className="subtitle">Ranked Draft HUD</p>
+          <p className="subtitle">Ranked Draft Assistant</p>
         </div>
 
-        {/* User Account Toggles */}
-        <div className="user-toggle-container">
+        {/* Dynamic User Profile Selector */}
+        <div className="profile-selector-menu">
           <button 
-            className={`btn ${currentUser.name === 'Walter' ? 'btn-primary' : ''}`}
-            onClick={() => switchUser('walter-supabase-uid-999', 'Walter')}
+            className="btn btn-profile-trigger" 
+            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
           >
-            Walter
+            👤 Player: <strong>{me?.name || currentUser.name}</strong> ▾
           </button>
-          <button 
-            className={`btn ${currentUser.name === 'Novia' ? 'btn-primary' : ''}`}
-            onClick={() => switchUser('novia-supabase-uid-888', 'Novia')}
-          >
-            Novia
-          </button>
-          <div className="active-user-badge">
-            Active: <span>{me?.name || currentUser.name}</span>
-          </div>
+          
+          {showProfileDropdown && (
+            <div className="profile-dropdown-menu glass-panel">
+              <div className="dropdown-title">Select Account</div>
+              {profiles.map(p => (
+                <button 
+                  key={p.id} 
+                  className={`dropdown-item ${currentUser.id === p.id ? 'active' : ''}`}
+                  onClick={() => handleProfileSelect(p)}
+                >
+                  {p.name}
+                </button>
+              ))}
+              <div className="dropdown-divider"></div>
+              <button 
+                className="dropdown-item add-profile-btn"
+                onClick={() => {
+                  setShowProfileCreator(true);
+                  setShowProfileDropdown(false);
+                }}
+              >
+                + Add Profile
+              </button>
+              <button 
+                className="dropdown-item logout-btn"
+                onClick={handleLogout}
+              >
+                🚪 Log Out
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
       {/* Main Grid */}
       <div className="main-grid">
-        
+
         {/* Left Panel: History & Perceptions */}
         <section className="left-panel glass-panel">
           <h2>Player Performance</h2>
-          
+
           <div className="stats-summary">
             <div className="stat-card">
               <span className="stat-num">{matches.length}</span>
@@ -318,7 +520,7 @@ function App() {
             </div>
             <div className="stat-card">
               <span className="stat-num">
-                {matches.length > 0 
+                {matches.length > 0
                   ? `${Math.round((matches.filter(m => m.result === 'victory').length / matches.length) * 100)}%`
                   : 'N/A'
                 }
@@ -369,7 +571,7 @@ function App() {
 
         {/* Center Panel: Interactive Draft Lobby */}
         <section className="center-panel">
-          
+
           {/* Map Select */}
           <div className="map-selector-bar glass-panel">
             <label htmlFor="map-select">Ranked Map:</label>
@@ -384,10 +586,10 @@ function App() {
           <div className="draft-hud glass-panel">
             <div className="allies-column">
               <h3>Blue Team (Allies)</h3>
-              
+
               <div className="slots-row picks">
                 {draft.allies_picked.map((b, idx) => (
-                  <div 
+                  <div
                     key={`ally-pick-${idx}`}
                     className={`draft-slot pick-slot ${activeSlot.type === 'allies_picked' && activeSlot.index === idx ? 'active-slot glow-ally' : ''}`}
                     onClick={() => selectSlot('allies_picked', idx)}
@@ -407,7 +609,7 @@ function App() {
 
               <div className="slots-row bans">
                 {draft.allies_banned.map((b, idx) => (
-                  <div 
+                  <div
                     key={`ally-ban-${idx}`}
                     className={`draft-slot ban-slot ${activeSlot.type === 'allies_banned' && activeSlot.index === idx ? 'active-slot glow-ally' : ''}`}
                     onClick={() => selectSlot('allies_banned', idx)}
@@ -428,10 +630,10 @@ function App() {
 
             <div className="enemies-column">
               <h3>Red Team (Enemies)</h3>
-              
+
               <div className="slots-row picks">
                 {draft.enemies_picked.map((b, idx) => (
-                  <div 
+                  <div
                     key={`enemy-pick-${idx}`}
                     className={`draft-slot pick-slot ${activeSlot.type === 'enemies_picked' && activeSlot.index === idx ? 'active-slot glow-enemy' : ''}`}
                     onClick={() => selectSlot('enemies_picked', idx)}
@@ -451,7 +653,7 @@ function App() {
 
               <div className="slots-row bans">
                 {draft.enemies_banned.map((b, idx) => (
-                  <div 
+                  <div
                     key={`enemy-ban-${idx}`}
                     className={`draft-slot ban-slot ${activeSlot.type === 'enemies_banned' && activeSlot.index === idx ? 'active-slot glow-enemy' : ''}`}
                     onClick={() => selectSlot('enemies_banned', idx)}
@@ -474,16 +676,16 @@ function App() {
           {/* Brawler Selector Grid */}
           <div className="brawler-selector-container glass-panel">
             <div className="filter-controls">
-              <input 
-                type="text" 
-                placeholder="Search Brawler..." 
+              <input
+                type="text"
+                placeholder="Search Brawler..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="search-input"
               />
               <div className="class-tabs">
                 {brawlerClasses.map(cls => (
-                  <button 
+                  <button
                     key={cls}
                     className={`tab-btn ${selectedClass === cls ? 'active' : ''}`}
                     onClick={() => setSelectedClass(cls)}
@@ -496,8 +698,8 @@ function App() {
 
             <div className="brawler-grid">
               {filteredBrawlers.map(b => (
-                <div 
-                  key={b.id} 
+                <div
+                  key={b.id}
                   className="brawler-card"
                   onClick={() => placeBrawler(b)}
                 >
@@ -510,8 +712,8 @@ function App() {
 
           <div className="action-buttons-row">
             <button className="btn btn-danger" onClick={resetDraft}>Reset Draft</button>
-            <button 
-              className="btn btn-primary" 
+            <button
+              className="btn btn-primary"
               onClick={openLogMatch}
               disabled={!draft.allies_picked.some(Boolean)}
             >
@@ -527,18 +729,18 @@ function App() {
 
           <div className="suggestions-list">
             {suggestions.map((item, index) => (
-              <div 
-                key={item.brawler.id} 
+              <div
+                key={item.brawler.id}
                 className={`suggestion-card ${index < 3 ? 'top-pick glow-gold' : ''}`}
               >
                 <div className="suggestion-rank">#{index + 1}</div>
                 <img src={item.brawler.image_url} alt={item.brawler.name} className="sug-img" />
-                
+
                 <div className="suggestion-details">
                   <span className="sug-name">{item.brawler.name}</span>
                   <span className="sug-class">{item.brawler.class_name}</span>
                 </div>
-                
+
                 <div className="suggestion-score-container">
                   <span className="sug-score">{item.score.toFixed(3)}</span>
                   <div className="tooltip-breakdown">
@@ -552,7 +754,7 @@ function App() {
                 </div>
               </div>
             ))}
-            
+
             {suggestions.length === 0 && (
               <div className="suggestions-placeholder">
                 <div className="pulse">💡</div>
@@ -563,22 +765,71 @@ function App() {
         </section>
       </div>
 
+      {/* Profile Creator Modal */}
+      {showProfileCreator && (
+        <div className="modal-backdrop">
+          <form className="modal-content glass-panel" onSubmit={handleCreateProfile}>
+            <h2>Register New Django Player</h2>
+            
+            <div className="modal-form-group">
+              <label htmlFor="new-prof-name">Username:</label>
+              <input 
+                id="new-prof-name"
+                type="text" 
+                placeholder="e.g. Player1, DraftKing" 
+                value={newProfileName}
+                onChange={(e) => setNewProfileName(e.target.value)}
+                className="search-input"
+                required
+                autoFocus
+              />
+            </div>
+
+            <div className="modal-form-group">
+              <label htmlFor="new-prof-pass">Password:</label>
+              <input 
+                id="new-prof-pass"
+                type="password" 
+                placeholder="••••••••" 
+                value={newProfilePassword}
+                onChange={(e) => setNewProfilePassword(e.target.value)}
+                className="search-input"
+                required
+              />
+            </div>
+
+            <div className="modal-actions">
+              <button type="button" className="btn" onClick={() => {
+                setShowProfileCreator(false);
+                setNewProfileName('');
+                setNewProfilePassword('');
+              }}>
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary">
+                Register & Login
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Post-Game Logger Modal */}
       {showMatchLogger && (
         <div className="modal-backdrop">
           <div className="modal-content glass-panel">
             <h2>Log Finished Match</h2>
-            
+
             <div className="modal-form-group">
               <label>Result:</label>
               <div className="result-toggle">
-                <button 
+                <button
                   className={`btn ${matchResult === 'victory' ? 'btn-primary' : ''}`}
                   onClick={() => setMatchResult('victory')}
                 >
                   Victory
                 </button>
-                <button 
+                <button
                   className={`btn ${matchResult === 'defeat' ? 'btn-danger' : ''}`}
                   onClick={() => setMatchResult('defeat')}
                 >
@@ -589,8 +840,8 @@ function App() {
 
             <div className="modal-form-group">
               <label>My Brawler:</label>
-              <select 
-                value={myBrawler?.id || ''} 
+              <select
+                value={myBrawler?.id || ''}
                 onChange={(e) => setMyBrawler(brawlers.find(b => b.id === e.target.value))}
               >
                 {draft.allies_picked.filter(Boolean).map(b => (
@@ -602,7 +853,7 @@ function App() {
             <div className="opponents-rating-section">
               <h3>Faced Opponents: Subjective Rating</h3>
               <p className="subtitle">Rate how hard it felt to play your brawler against them</p>
-              
+
               <div className="opponents-list-rating">
                 {draft.enemies_picked.filter(Boolean).map(enemy => (
                   <div key={enemy.id} className="opponent-rating-row">

@@ -7,6 +7,115 @@
   gap: 20px;
 }
 
+/* Connection Error Banner */
+.connection-error-banner {
+  background: rgba(255, 0, 85, 0.15);
+  border: 1px solid var(--color-enemy);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+/* Login/Registration Screen */
+.login-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(0, 229, 255, 0.05) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(255, 0, 85, 0.05) 0px, transparent 50%);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 450px;
+  padding: 40px;
+  text-align: center;
+}
+
+.login-card h1 {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  background: linear-gradient(135deg, #fff, #8b9bb4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 4px;
+}
+
+.login-card .subtitle {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  color: var(--color-ally);
+  font-weight: 600;
+  margin-bottom: 25px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  letter-spacing: 0.5px;
+}
+
+.login-btn {
+  padding: 12px;
+  font-size: 15px;
+}
+
+.existing-profiles {
+  margin-top: 25px;
+  border-top: 1px solid var(--border-glass);
+  padding-top: 20px;
+  text-align: left;
+}
+
+.existing-profiles h3 {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 12px;
+}
+
+.profiles-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.btn-profile-select {
+  font-size: 13px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-glass);
+}
+
+.btn-profile-select:hover {
+  border-color: var(--color-ally);
+  color: #fff;
+  background: rgba(0, 229, 255, 0.05);
+}
+
 .app-header {
   display: flex;
   justify-content: space-between;
@@ -31,23 +140,92 @@
   font-weight: 600;
 }
 
-.user-toggle-container {
-  display: flex;
-  gap: 12px;
-  align-items: center;
+/* Profile Selector Dropdown */
+.profile-selector-menu {
+  position: relative;
 }
 
-.active-user-badge {
-  font-size: 13px;
-  color: var(--color-text-muted);
-  border-left: 1px solid var(--border-glass);
-  padding-left: 15px;
-  margin-left: 5px;
+.btn-profile-trigger {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: var(--border-glass);
 }
 
-.active-user-badge span {
+.btn-profile-trigger strong {
   color: var(--color-ally);
+  margin-left: 4px;
+  margin-right: 2px;
+}
+
+.profile-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: 50px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-glass);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  width: 220px;
+  padding: 8px 0;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
   font-weight: 800;
+  padding: 6px 15px;
+  letter-spacing: 1px;
+}
+
+.dropdown-item {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--color-text-main);
+  padding: 10px 15px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.dropdown-item.active {
+  color: var(--color-ally);
+  background: rgba(0, 229, 255, 0.05);
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--border-glass);
+  margin: 6px 0;
+}
+
+.add-profile-btn {
+  color: var(--color-ally);
+  font-weight: 700;
+}
+
+.add-profile-btn:hover {
+  color: #fff;
+  background: rgba(0, 229, 255, 0.1);
+}
+
+.logout-btn {
+  color: #ff3b30;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 59, 48, 0.1);
+  color: #ff453a;
 }
 
 /* Main Grid Layout */

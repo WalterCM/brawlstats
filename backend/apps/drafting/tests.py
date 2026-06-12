@@ -20,14 +20,14 @@ class DraftAssistantTests(TestCase):
         # Set HTTP Headers for Supabase Middleware Authentication
         self.auth_headers = {
             'HTTP_X_SUPABASE_USER_ID': 'supabase-test-uid-123',
-            'HTTP_X_SUPABASE_USER_NAME': 'Walter'
+            'HTTP_X_SUPABASE_USER_NAME': 'TestPlayer'
         }
 
     def test_supabase_auth_middleware(self):
         # Test request to me endpoint with headers
         response = self.client.get(reverse('player-me'), **self.auth_headers)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['name'], 'Walter')
+        self.assertEqual(response.json()['name'], 'TestPlayer')
         self.assertEqual(response.json()['supabase_auth_id'], 'supabase-test-uid-123')
 
         # Verify Player object was created in database
@@ -69,7 +69,7 @@ class DraftAssistantTests(TestCase):
 
     def test_draft_suggestions(self):
         # Add some historical match to give Shelly a win and Colt a loss
-        player = Player.objects.create(name="Walter", supabase_auth_id="supabase-test-uid-123")
+        player = Player.objects.create(name="TestPlayer", supabase_auth_id="supabase-test-uid-123")
         
         # Shelly: 1 match, 1 victory
         m1 = Match.objects.create(player=player, map=self.stone_fort, my_brawler=self.shelly, mode="Gem Grab", result="victory")
