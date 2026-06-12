@@ -24,6 +24,8 @@ function App() {
   const [brawlers, setBrawlers] = useState([]);
   const [maps, setMaps] = useState([]);
   const [selectedMap, setSelectedMap] = useState(null);
+  const [showMapModal, setShowMapModal] = useState(false);
+  const [mapFilterMode, setMapFilterMode] = useState('All');
 
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -499,12 +501,25 @@ function App() {
 
           {/* Map Select */}
           <div className="map-selector-bar glass-panel">
-            <label htmlFor="map-select">Ranked Map:</label>
-            <select id="map-select" value={selectedMap?.id || ''} onChange={handleMapChange}>
-              {maps.map(m => (
-                <option key={m.id} value={m.id}>{m.name} ({m.mode})</option>
-              ))}
-            </select>
+            <label>Ranked Map:</label>
+            <button 
+              type="button" 
+              className="map-selector-btn"
+              onClick={() => setShowMapModal(true)}
+            >
+              {selectedMap?.image_url && (
+                <img 
+                  src={selectedMap.image_url} 
+                  alt={selectedMap.name} 
+                  className="map-btn-thumb" 
+                />
+              )}
+              <div className="map-btn-info">
+                <span className="map-btn-name">{selectedMap?.name || 'Select a Map'}</span>
+                <span className="map-btn-mode">{selectedMap?.mode || 'No mode'}</span>
+              </div>
+              <span className="map-btn-chevron">▼</span>
+            </button>
           </div>
 
           {/* Draft Selection HUD */}
@@ -784,6 +799,60 @@ function App() {
             <div className="modal-actions">
               <button className="btn" onClick={() => setShowMatchLogger(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={submitMatch}>Submit Logs</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Map Selector Modal */}
+      {showMapModal && (
+        <div className="map-selector-modal-backdrop" onClick={() => setShowMapModal(false)}>
+          <div className="map-selector-modal glass-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="map-modal-header">
+              <h2>Select Ranked Map</h2>
+              <button className="close-btn" onClick={() => setShowMapModal(false)}>&times;</button>
+            </div>
+            
+            <div className="map-modal-tabs">
+              {['All', 'Brawl Ball', 'Gem Grab', 'Heist', 'Hot Zone', 'Knockout', 'Bounty'].map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={`map-tab-btn ${mapFilterMode === mode ? 'active' : ''}`}
+                  onClick={() => setMapFilterMode(mode)}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+
+            <div className="map-modal-content">
+              <div className="map-grid">
+                {maps
+                  .filter(m => mapFilterMode === 'All' || m.mode === mapFilterMode)
+                  .map(m => (
+                    <div 
+                      key={m.id} 
+                      className={`map-card ${selectedMap?.id === m.id ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedMap(m);
+                        setShowMapModal(false);
+                      }}
+                    >
+                      <div className="map-card-img-wrapper">
+                        {m.image_url ? (
+                          <img src={m.image_url} alt={m.name} />
+                        ) : (
+                          <div className="map-placeholder">No Image</div>
+                        )}
+                      </div>
+                      <div className="map-card-info">
+                        <span className="map-card-name">{m.name}</span>
+                        <span className="map-card-mode">{m.mode}</span>
+                      </div>
+                    </div>
+                  ))}
+              </div>
             </div>
           </div>
         </div>
