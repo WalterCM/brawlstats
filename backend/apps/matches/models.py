@@ -4,12 +4,13 @@ from apps.core.models import Player, Brawler, Map
 class Match(models.Model):
     player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='matches')
     map = models.ForeignKey(Map, on_delete=models.CASCADE, related_name='matches')
+    my_brawler = models.ForeignKey(Brawler, on_delete=models.SET_NULL, related_name='matches_played', null=True, blank=True)
     mode = models.CharField(max_length=100)  # e.g., gemGrab, brawlBall
     result = models.CharField(max_length=20)  # victory / defeat
     date = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Match {self.id} - {self.player.name} ({self.result})"
+        return f"Match {self.id} - {self.player.name} as {self.my_brawler.name if self.my_brawler else 'Unknown'} ({self.result})"
 
 class DraftEvent(models.Model):
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name='draft_events')
