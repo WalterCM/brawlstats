@@ -496,6 +496,7 @@
   justify-content: space-between;
   padding: 16px 24px;
   border-bottom: 1px solid var(--border-glass);
+  flex-shrink: 0;
 }
 
 .map-modal-header h2 {
@@ -528,8 +529,14 @@
   gap: 8px;
   padding: 12px 24px;
   overflow-x: auto;
+  overflow-y: hidden;
   border-bottom: 1px solid var(--border-glass);
   background: rgba(0, 0, 0, 0.2);
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.map-modal-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .map-tab-btn {
@@ -543,6 +550,9 @@
   cursor: pointer;
   white-space: nowrap;
   transition: var(--transition-fast);
+  flex-shrink: 0;
+  min-width: 65px;
+  text-align: center;
 }
 
 .map-tab-btn:hover {
@@ -1149,8 +1159,14 @@
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
 }
 
-.btn-enter-draft:hover {
+.menu-card.ranked-draft-btn:hover {
   border-color: var(--color-ally);
+  box-shadow: 0 8px 30px rgba(0, 229, 255, 0.15);
+}
+
+.menu-card.normal-draft-btn:hover {
+  border-color: #ffd166;
+  box-shadow: 0 8px 30px rgba(255, 209, 102, 0.15);
 }
 
 .btn-logout-hub:hover {
@@ -1200,4 +1216,120 @@
   font-size: 13px;
   color: var(--color-text-muted);
   line-height: 1.5;
+}
+
+/* Collapsible Left Panel */
+.left-panel {
+  position: relative;
+  transition: width 0.3s ease, padding 0.3s ease, min-width 0.3s ease, opacity 0.3s ease;
+}
+
+.left-panel.collapsed {
+  width: 50px;
+  min-width: 50px;
+  padding: 15px 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.main-grid.left-collapsed {
+  grid-template-columns: 50px 1fr 380px;
+}
+
+.collapse-panel-btn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  color: var(--color-text-muted);
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition-fast);
+  z-index: 10;
+}
+
+.collapse-panel-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.left-panel.collapsed .collapse-panel-btn {
+  position: static;
+  margin-top: 10px;
+}
+
+/* Smaller Ban Slots above Picks */
+.small-bans {
+  margin-bottom: 5px;
+}
+
+.ban-slot {
+  height: 52px !important;
+  border-radius: 8px !important;
+}
+
+.ban-slot .filled-slot img {
+  height: 40px !important;
+  border-radius: 6px !important;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4) !important;
+}
+
+/* Brawler Selection Locked states */
+.brawler-card.banned-card {
+  opacity: 0.25;
+  filter: grayscale(1) brightness(0.6);
+  cursor: not-allowed;
+  border-color: var(--color-enemy) !important;
+  position: relative;
+  pointer-events: none;
+}
+
+.brawler-card.banned-card::after {
+  content: 'BAN';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--color-enemy);
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+}
+
+.brawler-card.picked-card {
+  opacity: 0.25;
+  filter: grayscale(0.8) brightness(0.6);
+  cursor: not-allowed;
+  border-color: var(--color-ally) !important;
+  position: relative;
+  pointer-events: none;
+}
+
+.brawler-card.picked-card::after {
+  content: 'PICK';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.5);
 }

@@ -53,7 +53,11 @@ export const api = {
 
   // Fetch the Maps Catalog
   async fetchMaps(isRanked = true) {
-    const res = await fetch(`${API_BASE_URL}/maps/?is_ranked=${isRanked}`, {
+    let url = `${API_BASE_URL}/maps/`;
+    if (isRanked === true || isRanked === false) {
+      url += `?is_ranked=${isRanked}`;
+    }
+    const res = await fetch(url, {
       headers: getAuthHeaders()
     });
     if (!res.ok) throw new Error('Failed to fetch maps');

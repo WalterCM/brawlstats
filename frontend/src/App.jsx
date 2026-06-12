@@ -2,6 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { api, setGlobalActiveUser } from './services/api';
 import './App.css';
 
+const deduplicateMaps = (mapList) => {
+  const seen = new Set();
+  return mapList.filter(m => {
+    const key = `${m.name.trim().toLowerCase()}-${m.mode.trim().toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 function App() {
   // Authentication & Users
   const [currentUser, setCurrentUser] = useState(() => {
@@ -26,9 +36,13 @@ function App() {
   const [selectedMap, setSelectedMap] = useState(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapFilterMode, setMapFilterMode] = useState('All');
+  const [draftType, setDraftType] = useState('ranked'); // 'ranked' or 'normal'
+  const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
+  const [firstPickTeam, setFirstPickTeam] = useState('allies'); // 'allies' or 'enemies'
 
   // Search
   const [searchQuery, setSearchQuery] = useState('');
+  const [mapSearchQuery, setMapSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState('All');
 
   // Personal Logs
@@ -88,10 +102,12 @@ function App() {
       const brawlerList = await api.fetchBrawlers();
       setBrawlers(brawlerList);
 
+      // Default to Ranked maps on startup
       const mapList = await api.fetchMaps(true);
-      setMaps(mapList);
-      if (mapList.length > 0) {
-        setSelectedMap(mapList[0]);
+      const uniqueMaps = deduplicateMaps(mapList);
+      setMaps(uniqueMaps);
+      if (uniqueMaps.length > 0) {
+        setSelectedMap(uniqueMaps[0]);
       }
 
       setBackendConnected(true);
@@ -100,6 +116,30 @@ function App() {
       console.error("Error loading catalogs:", err);
       setBackendConnected(false);
     }
+  };
+
+  const loadMapsForDraft = async (isRanked) => {
+    try {
+      const mapList = await api.fetchMaps(isRanked ? true : null);
+      const uniqueMaps = deduplicateMaps(mapList);
+      setMaps(uniqueMaps);
+      if (uniqueMaps.length > 0) {
+        if (!selectedMap || !uniqueMaps.some(m => m.id === selectedMap.id)) {
+          setSelectedMap(uniqueMaps[0]);
+        }
+      } else {
+        setSelectedMap(null);
+      }
+    } catch (err) {
+      console.error("Error loading maps:", err);
+    }
+  };
+
+  const enterDraftMode = async (type) => {
+    await loadMapsForDraft(type === 'ranked');
+    resetDraft(type);
+    setDraftType(type);
+    setCurrentView('draft');
   };
 
   const loadUserStats = async () => {
@@ -178,6 +218,9 @@ function App() {
   };
 
   const selectSlot = (type, index) => {
+    if (draftType === 'normal' && (type === 'allies_banned' || type === 'enemies_banned')) {
+      return;
+    }
     setActiveSlot({ type, index });
   };
 
@@ -188,67 +231,138 @@ function App() {
     setDraft({ ...draft, [type]: list });
   };
 
+  const getDraftSteps = (type = draftType, firstPick = firstPickTeam) => {
+    const steps = [];
+    if (type === 'ranked') {
+      // 3 Allies bans
+      steps.push(
+        { type: 'allies_banned', index: 0 },
+        { type: 'allies_banned', index: 1 },
+        { type: 'allies_banned', index: 2 },
+        // 3 Enemies bans
+        { type: 'enemies_banned', index: 0 },
+        { type: 'enemies_banned', index: 1 },
+        { type: 'enemies_banned', index: 2 }
+      );
+      
+      // 1-2-2-1 picks
+      if (firstPick === 'allies') {
+        steps.push(
+          { type: 'allies_picked', index: 0 },
+          { type: 'enemies_picked', index: 0 },
+          { type: 'enemies_picked', index: 1 },
+          { type: 'allies_picked', index: 1 },
+          { type: 'allies_picked', index: 2 },
+          { type: 'enemies_picked', index: 2 }
+        );
+      } else {
+        steps.push(
+          { type: 'enemies_picked', index: 0 },
+          { type: 'allies_picked', index: 0 },
+          { type: 'allies_picked', index: 1 },
+          { type: 'enemies_picked', index: 1 },
+          { type: 'enemies_picked', index: 2 },
+          { type: 'allies_picked', index: 2 }
+        );
+      }
+    } else {
+      // Normal: Pick 1, 2, 3 Allies then Pick 1, 2, 3 Enemies
+      steps.push(
+        { type: 'allies_picked', index: 0 },
+        { type: 'allies_picked', index: 1 },
+        { type: 'allies_picked', index: 2 },
+        { type: 'enemies_picked', index: 0 },
+        { type: 'enemies_picked', index: 1 },
+        { type: 'enemies_picked', index: 2 }
+      );
+    }
+    return steps;
+  };
+
+  const handleFirstPickChange = (team) => {
+    setFirstPickTeam(team);
+    resetDraft(draftType, team);
+  };
+
+  const flipCoin = () => {
+    const result = Math.random() < 0.5 ? 'allies' : 'enemies';
+    handleFirstPickChange(result);
+  };
+
   const placeBrawler = (brawler) => {
-    const isUsed = [
-      ...draft.allies_banned,
-      ...draft.enemies_banned,
+    const { type, index } = activeSlot;
+    
+    // Check if brawler is already picked
+    const isPicked = [
       ...draft.allies_picked,
       ...draft.enemies_picked
     ].some(b => b && b.id === brawler.id);
+    if (isPicked) return;
 
-    if (isUsed) return;
+    // Check ban status depending on active slot type
+    if (type === 'allies_banned') {
+      const isAlreadyBannedByAllies = draft.allies_banned.some(b => b && b.id === brawler.id);
+      if (isAlreadyBannedByAllies) return;
+    } else if (type === 'enemies_banned') {
+      const isAlreadyBannedByEnemies = draft.enemies_banned.some(b => b && b.id === brawler.id);
+      if (isAlreadyBannedByEnemies) return;
+    } else {
+      // Pick slots: cannot select a brawler banned by either team
+      const isBanned = [
+        ...draft.allies_banned,
+        ...draft.enemies_banned
+      ].some(b => b && b.id === brawler.id);
+      if (isBanned) return;
+    }
 
-    const list = [...draft[activeSlot.type]];
-    list[activeSlot.index] = brawler;
+    const list = [...draft[type]];
+    list[index] = brawler;
 
-    const newDraft = { ...draft, [activeSlot.type]: list };
+    const newDraft = { ...draft, [type]: list };
     setDraft(newDraft);
-    advanceSlot(activeSlot.type, activeSlot.index, newDraft);
+    advanceSlot(type, index, newDraft);
   };
 
   const advanceSlot = (type, index, currentDraft) => {
-    const sequence = [
-      { type: 'allies_banned', count: 3 },
-      { type: 'enemies_banned', count: 3 },
-      { type: 'allies_picked', count: 3 },
-      { type: 'enemies_picked', count: 3 }
-    ];
+    const steps = getDraftSteps();
+    const currentStepIdx = steps.findIndex(s => s.type === type && s.index === index);
+    if (currentStepIdx === -1) return;
 
-    let currentSeqIdx = sequence.findIndex(s => s.type === type);
-    let nextIndex = index + 1;
-    let nextType = type;
-
-    if (nextIndex >= sequence[currentSeqIdx].count) {
-      currentSeqIdx = (currentSeqIdx + 1) % sequence.length;
-      nextType = sequence[currentSeqIdx].type;
-      nextIndex = 0;
+    let nextStep = null;
+    for (let i = currentStepIdx + 1; i < steps.length; i++) {
+      const step = steps[i];
+      if (!currentDraft[step.type][step.index]) {
+        nextStep = step;
+        break;
+      }
     }
-
-    let found = false;
-    for (let s = 0; s < sequence.length; s++) {
-      const checkSeq = sequence[(currentSeqIdx + s) % sequence.length];
-      const checkType = checkSeq.type;
-      const startIndex = (s === 0) ? nextIndex : 0;
-
-      for (let i = startIndex; i < checkSeq.count; i++) {
-        if (!currentDraft[checkType][i]) {
-          setActiveSlot({ type: checkType, index: i });
-          found = true;
+    
+    if (!nextStep) {
+      for (let i = 0; i < currentStepIdx; i++) {
+        const step = steps[i];
+        if (!currentDraft[step.type][step.index]) {
+          nextStep = step;
           break;
         }
       }
-      if (found) break;
+    }
+
+    if (nextStep) {
+      setActiveSlot({ type: nextStep.type, index: nextStep.index });
     }
   };
 
-  const resetDraft = () => {
+  const resetDraft = (type = draftType, firstPick = firstPickTeam) => {
     setDraft({
       allies_banned: [null, null, null],
       enemies_banned: [null, null, null],
       allies_picked: [null, null, null],
       enemies_picked: [null, null, null],
     });
-    setActiveSlot({ type: 'allies_banned', index: 0 });
+    const steps = getDraftSteps(type, firstPick);
+    if (steps.length > 0) {
+      setActiveSlot({ type: steps[0].type, index: steps[0].index });
+    }
   };
 
   const openLogMatch = () => {
@@ -434,66 +548,79 @@ function App() {
 
       {/* Main Grid / Dashboard Hub */}
       {currentView === 'draft' ? (
-        <div className="main-grid">
+        <div className={`main-grid ${isLeftPanelCollapsed ? 'left-collapsed' : ''}`}>
 
         {/* Left Panel: History & Perceptions */}
-        <section className="left-panel glass-panel">
-          <h2>Player Performance</h2>
+        <section className={`left-panel glass-panel ${isLeftPanelCollapsed ? 'collapsed' : ''}`}>
+          <button 
+            type="button" 
+            className="collapse-panel-btn"
+            onClick={() => setIsLeftPanelCollapsed(!isLeftPanelCollapsed)}
+            title={isLeftPanelCollapsed ? "Expand panel" : "Collapse panel"}
+          >
+            {isLeftPanelCollapsed ? "▶" : "◀"}
+          </button>
 
-          <div className="stats-summary">
-            <div className="stat-card">
-              <span className="stat-num">{matches.length}</span>
-              <span className="stat-lbl">Matches</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-num">
-                {matches.length > 0
-                  ? `${Math.round((matches.filter(m => m.result === 'victory').length / matches.length) * 100)}%`
-                  : 'N/A'
-                }
-              </span>
-              <span className="stat-lbl">Win Rate</span>
-            </div>
-          </div>
+          {!isLeftPanelCollapsed && (
+            <>
+              <h2>Player Performance</h2>
 
-          <div className="history-section">
-            <h3>Recent Matches</h3>
-            <div className="match-list">
-              {matches.map((m) => (
-                <div key={m.id} className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`}>
-                  <div className="match-info">
-                    <span className="map-name">{m.map_id}</span>
-                    <span className="mode-lbl">{m.mode}</span>
-                  </div>
-                  <div className="match-result">
-                    <span className="brawler-played">{m.my_brawler_id}</span>
-                    <span className="result-badge">{m.result.toUpperCase()}</span>
-                  </div>
+              <div className="stats-summary">
+                <div className="stat-card">
+                  <span className="stat-num">{matches.length}</span>
+                  <span className="stat-lbl">Matches</span>
                 </div>
-              ))}
-              {matches.length === 0 && <p className="empty-msg">No matches logged yet.</p>}
-            </div>
-          </div>
-
-          <div className="perceptions-section">
-            <h3>Matchup Comforts</h3>
-            <div className="perception-list">
-              {perceptions.map((p) => (
-                <div key={p.id} className="perception-item">
-                  <span className="my-b">{p.my_brawler_id}</span>
-                  <span className="vs-lbl">vs</span>
-                  <span className="rival-b">{p.brawler_rival_id}</span>
-                  <span className={`rating-badge val-${p.value}`}>
-                    {p.value === 1 && 'Easy'}
-                    {p.value === 0 && 'Neutral'}
-                    {p.value === -1 && 'Hard'}
-                    {p.value === -2 && 'Counter'}
+                <div className="stat-card">
+                  <span className="stat-num">
+                    {matches.length > 0
+                      ? `${Math.round((matches.filter(m => m.result === 'victory').length / matches.length) * 100)}%`
+                      : 'N/A'
+                    }
                   </span>
+                  <span className="stat-lbl">Win Rate</span>
                 </div>
-              ))}
-              {perceptions.length === 0 && <p className="empty-msg">No perceptions rated yet.</p>}
-            </div>
-          </div>
+              </div>
+
+              <div className="history-section">
+                <h3>Recent Matches</h3>
+                <div className="match-list">
+                  {matches.map((m) => (
+                    <div key={m.id} className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`}>
+                      <div className="match-info">
+                        <span className="map-name">{m.map_id}</span>
+                        <span className="mode-lbl">{m.mode}</span>
+                      </div>
+                      <div className="match-result">
+                        <span className="brawler-played">{m.my_brawler_id}</span>
+                        <span className="result-badge">{m.result.toUpperCase()}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {matches.length === 0 && <p className="empty-msg">No matches logged yet.</p>}
+                </div>
+              </div>
+
+              <div className="perceptions-section">
+                <h3>Matchup Comforts</h3>
+                <div className="perception-list">
+                  {perceptions.map((p) => (
+                    <div key={p.id} className="perception-item">
+                      <span className="my-b">{p.my_brawler_id}</span>
+                      <span className="vs-lbl">vs</span>
+                      <span className="rival-b">{p.brawler_rival_id}</span>
+                      <span className={`rating-badge val-${p.value}`}>
+                        {p.value === 1 && 'Easy'}
+                        {p.value === 0 && 'Neutral'}
+                        {p.value === -1 && 'Hard'}
+                        {p.value === -2 && 'Counter'}
+                      </span>
+                    </div>
+                  ))}
+                  {perceptions.length === 0 && <p className="empty-msg">No perceptions rated yet.</p>}
+                </div>
+              </div>
+            </>
+          )}
         </section>
 
         {/* Center Panel: Interactive Draft Lobby */}
@@ -501,11 +628,14 @@ function App() {
 
           {/* Map Select */}
           <div className="map-selector-bar glass-panel">
-            <label>Ranked Map:</label>
+            <label>Map:</label>
             <button 
               type="button" 
               className="map-selector-btn"
-              onClick={() => setShowMapModal(true)}
+              onClick={() => {
+                setMapSearchQuery('');
+                setShowMapModal(true);
+              }}
             >
               {selectedMap?.image_url && (
                 <img 
@@ -522,10 +652,76 @@ function App() {
             </button>
           </div>
 
+          {/* Coin Flip Selector / Indicator */}
+          {draftType === 'ranked' && (
+            <div className="coin-flip-bar glass-panel" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '15px', marginBottom: '15px', padding: '10px' }}>
+              <span style={{ fontSize: '12px', fontWeight: '600', color: 'var(--color-text-muted)', letterSpacing: '0.5px' }}>FIRST PICK:</span>
+              <button
+                type="button"
+                className={`btn-coin ${firstPickTeam === 'allies' ? 'active' : ''}`}
+                onClick={() => handleFirstPickChange('allies')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid',
+                  borderColor: firstPickTeam === 'allies' ? 'var(--color-ally)' : 'var(--border-glass)',
+                  background: firstPickTeam === 'allies' ? 'rgba(0, 229, 255, 0.15)' : 'transparent',
+                  color: firstPickTeam === 'allies' ? '#fff' : 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                🔵 Blue Team (Allies)
+              </button>
+              <button
+                type="button"
+                className={`btn-coin ${firstPickTeam === 'enemies' ? 'active' : ''}`}
+                onClick={() => handleFirstPickChange('enemies')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid',
+                  borderColor: firstPickTeam === 'enemies' ? 'var(--color-enemy)' : 'var(--border-glass)',
+                  background: firstPickTeam === 'enemies' ? 'rgba(255, 0, 127, 0.15)' : 'transparent',
+                  color: firstPickTeam === 'enemies' ? '#fff' : 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                🔴 Red Team (Enemies)
+              </button>
+            </div>
+          )}
+
           {/* Draft Selection HUD */}
           <div className="draft-hud glass-panel">
             <div className="allies-column">
               <h3>Blue Team (Allies)</h3>
+
+              {draftType === 'ranked' && (
+                <div className="slots-row bans small-bans">
+                  {draft.allies_banned.map((b, idx) => (
+                    <div
+                      key={`ally-ban-${idx}`}
+                      className={`draft-slot ban-slot ${activeSlot.type === 'allies_banned' && activeSlot.index === idx ? 'active-slot glow-ally' : ''}`}
+                      onClick={() => selectSlot('allies_banned', idx)}
+                    >
+                      {b ? (
+                        <div className="filled-slot">
+                          <img src={b.image_url} alt={b.name} className="banned-img" />
+                          <button className="clear-btn" onClick={(e) => clearSlot('allies_banned', idx, e)}>×</button>
+                        </div>
+                      ) : (
+                        <span className="slot-placeholder">BAN {idx + 1}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="slots-row picks">
                 {draft.allies_picked.map((b, idx) => (
@@ -546,30 +742,31 @@ function App() {
                   </div>
                 ))}
               </div>
-
-              <div className="slots-row bans">
-                {draft.allies_banned.map((b, idx) => (
-                  <div
-                    key={`ally-ban-${idx}`}
-                    className={`draft-slot ban-slot ${activeSlot.type === 'allies_banned' && activeSlot.index === idx ? 'active-slot glow-ally' : ''}`}
-                    onClick={() => selectSlot('allies_banned', idx)}
-                  >
-                    {b ? (
-                      <div className="filled-slot">
-                        <img src={b.image_url} alt={b.name} className="banned-img" />
-                        <span className="slot-name">{b.name}</span>
-                        <button className="clear-btn" onClick={(e) => clearSlot('allies_banned', idx, e)}>×</button>
-                      </div>
-                    ) : (
-                      <span className="slot-placeholder">BAN {idx + 1}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
             </div>
 
             <div className="enemies-column">
               <h3>Red Team (Enemies)</h3>
+
+              {draftType === 'ranked' && (
+                <div className="slots-row bans small-bans">
+                  {draft.enemies_banned.map((b, idx) => (
+                    <div
+                      key={`enemy-ban-${idx}`}
+                      className={`draft-slot ban-slot ${activeSlot.type === 'enemies_banned' && activeSlot.index === idx ? 'active-slot glow-enemy' : ''}`}
+                      onClick={() => selectSlot('enemies_banned', idx)}
+                    >
+                      {b ? (
+                        <div className="filled-slot">
+                          <img src={b.image_url} alt={b.name} className="banned-img" />
+                          <button className="clear-btn" onClick={(e) => clearSlot('enemies_banned', idx, e)}>×</button>
+                        </div>
+                      ) : (
+                        <span className="slot-placeholder">BAN {idx + 1}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <div className="slots-row picks">
                 {draft.enemies_picked.map((b, idx) => (
@@ -586,26 +783,6 @@ function App() {
                       </div>
                     ) : (
                       <span className="slot-placeholder">PICK {idx + 1}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="slots-row bans">
-                {draft.enemies_banned.map((b, idx) => (
-                  <div
-                    key={`enemy-ban-${idx}`}
-                    className={`draft-slot ban-slot ${activeSlot.type === 'enemies_banned' && activeSlot.index === idx ? 'active-slot glow-enemy' : ''}`}
-                    onClick={() => selectSlot('enemies_banned', idx)}
-                  >
-                    {b ? (
-                      <div className="filled-slot">
-                        <img src={b.image_url} alt={b.name} className="banned-img" />
-                        <span className="slot-name">{b.name}</span>
-                        <button className="clear-btn" onClick={(e) => clearSlot('enemies_banned', idx, e)}>×</button>
-                      </div>
-                    ) : (
-                      <span className="slot-placeholder">BAN {idx + 1}</span>
                     )}
                   </div>
                 ))}
@@ -637,16 +814,35 @@ function App() {
             </div>
 
             <div className="brawler-grid">
-              {filteredBrawlers.map(b => (
-                <div
-                  key={b.id}
-                  className="brawler-card"
-                  onClick={() => placeBrawler(b)}
-                >
-                  <img src={b.image_url} alt={b.name} />
-                  <span className="brawler-name">{b.name}</span>
-                </div>
-              ))}
+              {filteredBrawlers.map(b => {
+                const isPicked = [
+                  ...draft.allies_picked,
+                  ...draft.enemies_picked
+                ].some(p => p && p.id === b.id);
+
+                let isBanned = false;
+                if (activeSlot.type === 'allies_banned') {
+                  isBanned = draft.allies_banned.some(ban => ban && ban.id === b.id);
+                } else if (activeSlot.type === 'enemies_banned') {
+                  isBanned = draft.enemies_banned.some(ban => ban && ban.id === b.id);
+                } else {
+                  isBanned = [
+                    ...draft.allies_banned,
+                    ...draft.enemies_banned
+                  ].some(ban => ban && ban.id === b.id);
+                }
+
+                return (
+                  <div
+                    key={b.id}
+                    className={`brawler-card ${isBanned ? 'banned-card' : ''} ${isPicked ? 'picked-card' : ''}`}
+                    onClick={() => placeBrawler(b)}
+                  >
+                    <img src={b.image_url} alt={b.name} />
+                    <span className="brawler-name">{b.name}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -711,11 +907,27 @@ function App() {
             <p className="welcome-subtitle">Brawl Stats Game Hub</p>
             
             <div className="menu-options-grid">
-              <button className="menu-card btn-enter-draft" onClick={() => setCurrentView('draft')} style={{ width: '100%' }}>
+              <button 
+                className="menu-card btn-enter-draft ranked-draft-btn" 
+                onClick={() => enterDraftMode('ranked')}
+                style={{ width: '100%' }}
+              >
+                <div className="menu-card-icon">🏆</div>
+                <div className="menu-card-details">
+                  <h3>Competitive Draft (Ranked)</h3>
+                  <p>Draft with Bans using the active Ranked seasonal map rotation.</p>
+                </div>
+              </button>
+              
+              <button 
+                className="menu-card btn-enter-draft normal-draft-btn" 
+                onClick={() => enterDraftMode('normal')}
+                style={{ width: '100%', marginTop: '10px' }}
+              >
                 <div className="menu-card-icon">🎮</div>
                 <div className="menu-card-details">
-                  <h3>Enter Draft Assistant</h3>
-                  <p>Start a new draft session with real-time picks, bans, and counter calculations.</p>
+                  <h3>Normal Draft (No Bans)</h3>
+                  <p>Draft without Bans using all available maps in the database.</p>
                 </div>
               </button>
             </div>
@@ -809,7 +1021,7 @@ function App() {
         <div className="map-selector-modal-backdrop" onClick={() => setShowMapModal(false)}>
           <div className="map-selector-modal glass-panel" onClick={(e) => e.stopPropagation()}>
             <div className="map-modal-header">
-              <h2>Select Ranked Map</h2>
+              <h2>Select Map</h2>
               <button className="close-btn" onClick={() => setShowMapModal(false)}>&times;</button>
             </div>
             
@@ -826,10 +1038,32 @@ function App() {
               ))}
             </div>
 
+            <div className="map-search-bar" style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-glass)', flexShrink: 0 }}>
+              <input
+                type="text"
+                placeholder="Search map by name..."
+                value={mapSearchQuery}
+                onChange={(e) => setMapSearchQuery(e.target.value)}
+                className="search-input"
+                style={{
+                  width: '100%',
+                  padding: '10px 16px',
+                  fontSize: '0.9rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-glass)',
+                  background: 'rgba(0,0,0,0.2)',
+                  color: '#fff',
+                  outline: 'none',
+                  transition: 'all 0.2s ease'
+                }}
+              />
+            </div>
+
             <div className="map-modal-content">
               <div className="map-grid">
                 {maps
                   .filter(m => mapFilterMode === 'All' || m.mode === mapFilterMode)
+                  .filter(m => m.name.toLowerCase().includes(mapSearchQuery.toLowerCase()))
                   .map(m => (
                     <div 
                       key={m.id} 
