@@ -68,14 +68,14 @@ TROPHY_RANGE = "Diamond I+"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = SCRIPT_DIR / ".." / "backend" / "apps" / "core" / "management" / "commands"
-MAPS_OUTPUT = OUTPUT_DIR / "maps_tiered_stats.json"
-GLOBAL_OUTPUT = OUTPUT_DIR / "brawlers_global_stats.json"
+MAPS_OUTPUT = OUTPUT_DIR / "maps_tiered_stats_planet.json"
+GLOBAL_OUTPUT = OUTPUT_DIR / "brawlers_global_stats_planet.json"
 
 # Custom/Fictional brawlers that should not be included in the dataset
 BRAWLERS_TO_IGNORE = {
-    "buzz lightyear", "meeple", "ollie", "lumi", "finx", "jae-yong", "kaze",
+    "buzz lightyear", "meeple", "ollie", "lumi", "jae-yong", "kaze",
     "alli", "trunk", "mina", "ziggy", "pierce", "gigi", "glowy", "sirius",
-    "najia", "damian", "starr nova", "bolt"
+    "damian", "starr nova", "bolt"
 }
 
 
@@ -263,13 +263,13 @@ def main(dry_run: bool = False):
     with open(MAPS_OUTPUT, "w", encoding="utf-8") as f:
         json.dump(maps_data, f, ensure_ascii=False, indent=2)
     size_kb = MAPS_OUTPUT.stat().st_size / 1024
-    print(f"\n✅ maps_tiered_stats.json → {len(maps_data)} mapas ({size_kb:.1f} KB)")
+    print(f"\n✅ maps_tiered_stats_planet.json → {len(maps_data)} mapas ({size_kb:.1f} KB)")
 
     global_stats = compute_global_stats(maps_data)
     with open(GLOBAL_OUTPUT, "w", encoding="utf-8") as f:
         json.dump(global_stats, f, ensure_ascii=False, indent=2)
     size_kb2 = GLOBAL_OUTPUT.stat().st_size / 1024
-    print(f"✅ brawlers_global_stats.json → {len(global_stats)} brawlers ({size_kb2:.1f} KB)")
+    print(f"✅ brawlers_global_stats_planet.json → {len(global_stats)} brawlers ({size_kb2:.1f} KB)")
 
     # Reporte
     total_entries = sum(len(m["stats"]) for m in maps_data)

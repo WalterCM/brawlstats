@@ -22,6 +22,7 @@ import re
 import sys
 import argparse
 import os
+import shutil
 from collections import defaultdict
 from pathlib import Path
 
@@ -62,8 +63,8 @@ CATEGORIES = ["best_pick", "winner", "most_used", "not_recommended"]
 SCRIPT_DIR = Path(__file__).resolve().parent
 OUTPUT_DIR = SCRIPT_DIR / ".." / "backend" / "apps" / "core" / "management" / "commands"
 
-MAPS_OUTPUT = OUTPUT_DIR / "maps_tiered_stats.json"
-GLOBAL_OUTPUT = OUTPUT_DIR / "brawlers_global_stats.json"
+MAPS_OUTPUT = OUTPUT_DIR / "maps_tiered_stats_brawlify.json"
+GLOBAL_OUTPUT = OUTPUT_DIR / "brawlers_global_stats_brawlify.json"
 
 # Delays y timeouts
 PAGE_TIMEOUT_MS = 45_000    # Timeout de carga de página
@@ -106,11 +107,11 @@ async def scrape_map(page, map_id: str, verbose: bool = True) -> dict | None:
             # Brawlify hace polling continuo que impide que networkidle se dispare.
             await page.goto(url, timeout=PAGE_TIMEOUT_MS, wait_until="domcontentloaded")
 
-            # Esperar a que los contenedores scrollable aparezcan en el DOM
+            # Esperar a que los contenedores de categorías aparezcan en el DOM
             try:
-                await page.wait_for_selector("div[scrollable='true']", timeout=25_000)
+                await page.wait_for_selector("[data-category]", timeout=25_000)
             except PlaywrightTimeoutError:
-                print(f"  [WARN] Mapa {map_id}: los contenedores scrollable no aparecieron a tiempo.")
+                print(f"  [WARN] Mapa {map_id}: los contenedores de categorías no aparecieron a tiempo.")
 
             # Pequeña pausa adicional para que el JS termine de renderizar
             await asyncio.sleep(1.5)
@@ -127,18 +128,21 @@ async def scrape_map(page, map_id: str, verbose: bool = True) -> dict | None:
                 title = await page.title()
                 map_name = title.split("-")[0].strip() if "-" in title else title.strip()
 
-            # Encontrar los 4 contenedores scrollable
-            scrollables = page.locator("div[scrollable='true']")
-            count = await scrollables.count()
+            # Strip trailing period
+            map_name = map_name.rstrip(".")
 
-            if count == 0:
-                print(f"  [WARN] Mapa {map_id}: no se encontraron contenedores scrollable.")
-                return None
+            ASTRO_CATEGORIES = {
+                "bestPicks": "best_pick",
+                "winners": "winner",
+                "mostUsed": "most_used",
+                "notRecommended": "not_recommended"
+            }
 
             stats = []
-            for cat_idx in range(min(count, len(CATEGORIES))):
-                category = CATEGORIES[cat_idx]
-                container = scrollables.nth(cat_idx)
+            for astro_cat, db_cat in ASTRO_CATEGORIES.items():
+                container = page.locator(f"[data-category='{astro_cat}']")
+                if await container.count() == 0:
+                    continue
 
                 cards = container.locator("a")
                 card_count = await cards.count()
@@ -175,11 +179,15 @@ async def scrape_map(page, map_id: str, verbose: bool = True) -> dict | None:
                         "brawler_name": brawler_name,
                         "win_rate": win_rate,
                         "pick_rate": pick_rate,
-                        "category": category,
+                        "category": db_cat,
                     })
 
+            if len(stats) == 0:
+                print(f"  [WARN] Mapa {map_id}: no se encontraron estadísticas en ninguna categoría.")
+                return None
+
             if verbose:
-                print(f"  ✓ {map_name} ({map_id}): {len(stats)} brawlers en {min(count, 4)} categorías.")
+                print(f"  ✓ {map_name} ({map_id}): {len(stats)} brawlers.")
 
             return {
                 "map_id": map_id,
@@ -243,7 +251,7 @@ def compute_global_stats(maps_data: list[dict]) -> list[dict]:
 # Punto de entrada
 # ---------------------------------------------------------------------------
 
-async def main(dry_run: bool = False, headless: bool = True):
+async def main(dry_run: bool = False, headless: bool = False):
     map_ids = MAP_IDS[:1] if dry_run else MAP_IDS
     mode = "DRY-RUN (1 mapa)" if dry_run else f"{len(map_ids)} mapas"
 
@@ -257,27 +265,39 @@ async def main(dry_run: bool = False, headless: bool = True):
     maps_data = []
     failed_maps = []
 
+    user_data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "playwright_user_data"))
+
+    # Copy cookies from system Chromium to bypass Cloudflare Turnstile automatically
+    system_cookies_path = os.path.expanduser("~/.config/chromium/Default/Cookies")
+    if os.path.exists(system_cookies_path):
+        dest_dir = os.path.join(user_data_dir, "Default")
+        os.makedirs(dest_dir, exist_ok=True)
+        dest_cookies = os.path.join(dest_dir, "Cookies")
+        try:
+            shutil.copy2(system_cookies_path, dest_cookies)
+            print("✓ Cookies de Chromium del sistema copiadas para eludir Cloudflare Turnstile.")
+        except Exception as e:
+            print(f"[WARN] No se pudieron copiar las cookies del sistema: {e}")
+
+    executable_path = "/usr/bin/chromium" if os.path.exists("/usr/bin/chromium") else None
+
     async with async_playwright() as p:
-        browser = await p.chromium.launch(
+        context = await p.chromium.launch_persistent_context(
+            user_data_dir=user_data_dir,
+            executable_path=executable_path,
             headless=headless,
+            ignore_default_args=["--enable-automation"],
             args=[
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-blink-features=AutomationControlled",
             ],
-        )
-
-        context = await browser.new_context(
-            user_agent=(
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
-            ),
             locale="en-US",
             viewport={"width": 1280, "height": 800},
             java_script_enabled=True,
         )
 
-        page = await context.new_page()
+        page = context.pages[0] if context.pages else await context.new_page()
 
         # Aplicar stealth si está disponible
         if STEALTH_AVAILABLE:
@@ -287,7 +307,19 @@ async def main(dry_run: bool = False, headless: bool = True):
         print("⏳ Warm-up: cargando brawlify.com para obtener cookies de sesión...")
         try:
             await page.goto("https://brawlify.com", timeout=30_000, wait_until="domcontentloaded")
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(2.0)
+            
+            # Check for Cloudflare Turnstile / Security Check
+            title = await page.title()
+            if "Security Check" in title or "Just a moment" in title:
+                print("\n" + "!" * 70)
+                print("[!] DETECTADO CONTROL DE SEGURIDAD DE CLOUDFLARE (TURNSTILE).")
+                print("[!] Por favor, resuelve el captcha en la ventana del navegador.")
+                print("[!] Una vez resuelto y cargada la página, presiona ENTER en esta terminal para continuar...")
+                print("!" * 70 + "\n")
+                # Wait for user input in a non-blocking way
+                await asyncio.get_event_loop().run_in_executor(None, input)
+                
             print("✓ Warm-up completado.\n")
         except Exception as e:
             print(f"[WARN] Warm-up falló ({e}), continuando de todas formas...\n")
@@ -306,7 +338,7 @@ async def main(dry_run: bool = False, headless: bool = True):
             if i < len(map_ids):
                 await asyncio.sleep(DELAY_BETWEEN_MAPS_MS / 1000)
 
-        await browser.close()
+        await context.close()
 
     # ---------------------------------------------------------------------------
     # Escribir archivos de salida
@@ -318,16 +350,16 @@ async def main(dry_run: bool = False, headless: bool = True):
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # maps_tiered_stats.json
+    # maps_tiered_stats_brawlify.json
     with open(MAPS_OUTPUT, "w", encoding="utf-8") as f:
         json.dump(maps_data, f, ensure_ascii=False, indent=2)
-    print(f"\n✅ maps_tiered_stats.json → {len(maps_data)} mapas ({MAPS_OUTPUT.stat().st_size / 1024:.1f} KB)")
+    print(f"\n✅ maps_tiered_stats_brawlify.json → {len(maps_data)} mapas ({MAPS_OUTPUT.stat().st_size / 1024:.1f} KB)")
 
-    # brawlers_global_stats.json
+    # brawlers_global_stats_brawlify.json
     global_stats = compute_global_stats(maps_data)
     with open(GLOBAL_OUTPUT, "w", encoding="utf-8") as f:
         json.dump(global_stats, f, ensure_ascii=False, indent=2)
-    print(f"✅ brawlers_global_stats.json → {len(global_stats)} brawlers ({GLOBAL_OUTPUT.stat().st_size / 1024:.1f} KB)")
+    print(f"✅ brawlers_global_stats_brawlify.json → {len(global_stats)} brawlers ({GLOBAL_OUTPUT.stat().st_size / 1024:.1f} KB)")
 
     # Reporte final
     print(f"\n{'='*60}")
@@ -355,10 +387,10 @@ if __name__ == "__main__":
         help="Procesa solo el primer mapa para validar la estructura del scraper.",
     )
     parser.add_argument(
-        "--no-headless",
+        "--headless",
         action="store_true",
-        help="Lanza el browser con interfaz visual (útil para debugging).",
+        help="Lanza el browser sin interfaz visual (por defecto es visible/headful).",
     )
     args = parser.parse_args()
 
-    asyncio.run(main(dry_run=args.dry_run, headless=not args.no_headless))
+    asyncio.run(main(dry_run=args.dry_run, headless=args.headless))

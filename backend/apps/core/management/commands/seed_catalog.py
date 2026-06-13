@@ -50,12 +50,7 @@ class Command(BaseCommand):
                 for item in brawler_list:
                     brawler_id = str(item["id"])
                     
-                    # Ignore custom/fictional brawlers (ID >= 16000088)
-                    try:
-                        if int(brawler_id) >= 16000088:
-                            continue
-                    except ValueError:
-                        pass
+
 
                     name = item.get("name", "Unknown")
                     image_url = item.get("imageUrl", "")

@@ -55,6 +55,7 @@ staticfiles/
 .DS_Store
 Thumbs.db
 
+
 # Node (Frontend)
 node_modules/
 /dist
@@ -64,3 +65,12 @@ yarn-error.log
 .eslintcache
 .parcel-cache
 .cache
+
+# Playwright User Data & Temp files
+*playwright_user_data*/
+scratch/
+backend/scratch/
+
+# Scraper intermediate data
+*_stats_brawlify.json
+*_stats_planet.json
