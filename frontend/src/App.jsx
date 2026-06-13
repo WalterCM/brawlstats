@@ -39,6 +39,7 @@ function App() {
   const [draftType, setDraftType] = useState('ranked'); // 'ranked' or 'normal'
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [firstPickTeam, setFirstPickTeam] = useState('allies'); // 'allies' or 'enemies'
+  const [enableBans, setEnableBans] = useState(true);
 
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,10 +107,7 @@ function App() {
       const mapList = await api.fetchMaps(true);
       const uniqueMaps = deduplicateMaps(mapList);
       setMaps(uniqueMaps);
-      if (uniqueMaps.length > 0) {
-        setSelectedMap(uniqueMaps[0]);
-      }
-
+      setSelectedMap(null);
       setBackendConnected(true);
       loadUserStats();
     } catch (err) {
@@ -124,8 +122,8 @@ function App() {
       const uniqueMaps = deduplicateMaps(mapList);
       setMaps(uniqueMaps);
       if (uniqueMaps.length > 0) {
-        if (!selectedMap || !uniqueMaps.some(m => m.id === selectedMap.id)) {
-          setSelectedMap(uniqueMaps[0]);
+        if (selectedMap && !uniqueMaps.some(m => m.id === selectedMap.id)) {
+          setSelectedMap(null);
         }
       } else {
         setSelectedMap(null);
@@ -137,8 +135,8 @@ function App() {
 
   const enterDraftMode = async (type) => {
     await loadMapsForDraft(type === 'ranked');
-    resetDraft(type);
     setDraftType(type);
+    resetDraft(type, firstPickTeam, type === 'ranked' ? enableBans : false);
     setCurrentView('draft');
   };
 
@@ -218,7 +216,7 @@ function App() {
   };
 
   const selectSlot = (type, index) => {
-    if (draftType === 'normal' && (type === 'allies_banned' || type === 'enemies_banned')) {
+    if ((draftType === 'normal' || !enableBans) && (type === 'allies_banned' || type === 'enemies_banned')) {
       return;
     }
     setActiveSlot({ type, index });
@@ -231,19 +229,21 @@ function App() {
     setDraft({ ...draft, [type]: list });
   };
 
-  const getDraftSteps = (type = draftType, firstPick = firstPickTeam) => {
+  const getDraftSteps = (type = draftType, firstPick = firstPickTeam, bansEnabled = enableBans) => {
     const steps = [];
     if (type === 'ranked') {
-      // 3 Allies bans
-      steps.push(
-        { type: 'allies_banned', index: 0 },
-        { type: 'allies_banned', index: 1 },
-        { type: 'allies_banned', index: 2 },
-        // 3 Enemies bans
-        { type: 'enemies_banned', index: 0 },
-        { type: 'enemies_banned', index: 1 },
-        { type: 'enemies_banned', index: 2 }
-      );
+      if (bansEnabled) {
+        // 3 Allies bans
+        steps.push(
+          { type: 'allies_banned', index: 0 },
+          { type: 'allies_banned', index: 1 },
+          { type: 'allies_banned', index: 2 },
+          // 3 Enemies bans
+          { type: 'enemies_banned', index: 0 },
+          { type: 'enemies_banned', index: 1 },
+          { type: 'enemies_banned', index: 2 }
+        );
+      }
       
       // 1-2-2-1 picks
       if (firstPick === 'allies') {
@@ -352,22 +352,21 @@ function App() {
     }
   };
 
-  const resetDraft = (type = draftType, firstPick = firstPickTeam) => {
+  const resetDraft = (type = draftType, firstPick = firstPickTeam, bansEnabled = enableBans) => {
     setDraft({
       allies_banned: [null, null, null],
       enemies_banned: [null, null, null],
       allies_picked: [null, null, null],
       enemies_picked: [null, null, null],
     });
-    const steps = getDraftSteps(type, firstPick);
+    const steps = getDraftSteps(type, firstPick, bansEnabled);
     if (steps.length > 0) {
       setActiveSlot({ type: steps[0].type, index: steps[0].index });
     }
   };
 
   const openLogMatch = () => {
-    const myPick = draft.allies_picked.find(Boolean) || null;
-    setMyBrawler(myPick);
+    setMyBrawler(null);
 
     const enemies = draft.enemies_picked.filter(Boolean);
     const initialPerceptions = {};
@@ -387,6 +386,7 @@ function App() {
         my_brawler_id: myBrawler.id,
         mode: selectedMap.mode,
         result: matchResult,
+        draft_type: draftType,
         draft_events: []
       };
 
@@ -424,6 +424,20 @@ function App() {
       alert("Failed to save match logs.");
     }
   };
+
+  const getMapName = (id) => {
+    const found = maps.find(m => String(m.id) === String(id));
+    return found ? found.name : id;
+  };
+
+  const getBrawlerName = (id) => {
+    const found = brawlers.find(b => String(b.id) === String(id));
+    return found ? found.name : id;
+  };
+
+  const displayedMatches = selectedMap
+    ? matches.filter(m => String(m.map_id) === String(selectedMap.id))
+    : matches;
 
   const filteredBrawlers = brawlers.filter(b => {
     const matchesSearch = b.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -563,17 +577,17 @@ function App() {
 
           {!isLeftPanelCollapsed && (
             <>
-              <h2>Player Performance</h2>
+              <h2>Player Performance {selectedMap ? `(${selectedMap.name})` : ''}</h2>
 
               <div className="stats-summary">
                 <div className="stat-card">
-                  <span className="stat-num">{matches.length}</span>
+                  <span className="stat-num">{displayedMatches.length}</span>
                   <span className="stat-lbl">Matches</span>
                 </div>
                 <div className="stat-card">
                   <span className="stat-num">
-                    {matches.length > 0
-                      ? `${Math.round((matches.filter(m => m.result === 'victory').length / matches.length) * 100)}%`
+                    {displayedMatches.length > 0
+                      ? `${Math.round((displayedMatches.filter(m => m.result === 'victory').length / displayedMatches.length) * 100)}%`
                       : 'N/A'
                     }
                   </span>
@@ -584,19 +598,19 @@ function App() {
               <div className="history-section">
                 <h3>Recent Matches</h3>
                 <div className="match-list">
-                  {matches.map((m) => (
+                  {displayedMatches.map((m) => (
                     <div key={m.id} className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`}>
                       <div className="match-info">
-                        <span className="map-name">{m.map_id}</span>
+                        <span className="map-name">{getMapName(m.map_id)}</span>
                         <span className="mode-lbl">{m.mode}</span>
                       </div>
                       <div className="match-result">
-                        <span className="brawler-played">{m.my_brawler_id}</span>
+                        <span className="brawler-played">{getBrawlerName(m.my_brawler_id)}</span>
                         <span className="result-badge">{m.result.toUpperCase()}</span>
                       </div>
                     </div>
                   ))}
-                  {matches.length === 0 && <p className="empty-msg">No matches logged yet.</p>}
+                  {displayedMatches.length === 0 && <p className="empty-msg">No matches logged yet.</p>}
                 </div>
               </div>
 
@@ -605,9 +619,9 @@ function App() {
                 <div className="perception-list">
                   {perceptions.map((p) => (
                     <div key={p.id} className="perception-item">
-                      <span className="my-b">{p.my_brawler_id}</span>
+                      <span className="my-b">{getBrawlerName(p.my_brawler_id)}</span>
                       <span className="vs-lbl">vs</span>
-                      <span className="rival-b">{p.brawler_rival_id}</span>
+                      <span className="rival-b">{getBrawlerName(p.brawler_rival_id)}</span>
                       <span className={`rating-badge val-${p.value}`}>
                         {p.value === 1 && 'Easy'}
                         {p.value === 0 && 'Neutral'}
@@ -694,6 +708,30 @@ function App() {
               >
                 🔴 Red Team (Enemies)
               </button>
+              <button
+                type="button"
+                className={`btn-coin ${enableBans ? 'active' : ''}`}
+                onClick={() => {
+                  const newEnable = !enableBans;
+                  setEnableBans(newEnable);
+                  resetDraft(draftType, firstPickTeam, newEnable);
+                }}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  border: '1px solid',
+                  borderColor: enableBans ? 'var(--color-ally)' : 'var(--border-glass)',
+                  background: enableBans ? 'rgba(0, 229, 255, 0.15)' : 'transparent',
+                  color: enableBans ? '#fff' : 'var(--color-text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: '600',
+                  transition: 'all 0.2s ease',
+                  marginLeft: '15px'
+                }}
+              >
+                🚫 Bans: {enableBans ? 'ON' : 'OFF'}
+              </button>
             </div>
           )}
 
@@ -702,7 +740,7 @@ function App() {
             <div className="allies-column">
               <h3>Blue Team (Allies)</h3>
 
-              {draftType === 'ranked' && (
+              {draftType === 'ranked' && enableBans && (
                 <div className="slots-row bans small-bans">
                   {draft.allies_banned.map((b, idx) => (
                     <div
@@ -747,7 +785,7 @@ function App() {
             <div className="enemies-column">
               <h3>Red Team (Enemies)</h3>
 
-              {draftType === 'ranked' && (
+              {draftType === 'ranked' && enableBans && (
                 <div className="slots-row bans small-bans">
                   {draft.enemies_banned.map((b, idx) => (
                     <div
@@ -965,8 +1003,9 @@ function App() {
               <label>My Brawler:</label>
               <select
                 value={myBrawler?.id || ''}
-                onChange={(e) => setMyBrawler(brawlers.find(b => b.id === e.target.value))}
+                onChange={(e) => setMyBrawler(brawlers.find(b => b.id === e.target.value) || null)}
               >
+                <option value="">-- Select Your Brawler --</option>
                 {draft.allies_picked.filter(Boolean).map(b => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
@@ -1010,7 +1049,7 @@ function App() {
 
             <div className="modal-actions">
               <button className="btn" onClick={() => setShowMatchLogger(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitMatch}>Submit Logs</button>
+              <button className="btn btn-primary" onClick={submitMatch} disabled={!myBrawler}>Submit Logs</button>
             </div>
           </div>
         </div>

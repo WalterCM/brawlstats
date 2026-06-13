@@ -7,6 +7,7 @@ class Match(models.Model):
     my_brawler = models.ForeignKey(Brawler, on_delete=models.SET_NULL, related_name='matches_played', null=True, blank=True)
     mode = models.CharField(max_length=100)  # e.g., gemGrab, brawlBall
     result = models.CharField(max_length=20)  # victory / defeat
+    draft_type = models.CharField(max_length=20, default='normal')  # normal / ranked
     date = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

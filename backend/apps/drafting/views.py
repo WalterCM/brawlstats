@@ -42,6 +42,7 @@ class DraftSuggestionView(views.APIView):
             return response.Response({"error": "Map not found"}, status=status.HTTP_404_NOT_FOUND)
 
         brawlers = Brawler.objects.exclude(id__in=excluded_ids)
+        total_map_matches = Match.objects.filter(player=player, map=target_map).count()
         suggestions = []
 
         for b in brawlers:
@@ -139,8 +140,15 @@ class DraftSuggestionView(views.APIView):
             # --- 4. Component E: Confidence Penalty ---
             score_e = 1.0 - 0.2 * math.exp(-games_player / 5.0)
 
-            # Combined Suggestion Score using the new formula
-            combined_score = (score_a * score_b * score_c * score_e) + (0.15 * pick_rate_meta)
+            # --- 5. Bayesian Pick Rate Smoothing with Damping Anchor ---
+            k_pick_prior = 20.0
+            raw_effective_pr = (games_player + pick_rate_meta * k_pick_prior) / (total_map_matches + k_pick_prior)
+            # Blend 80% effective pick rate with 20% global meta to keep a baseline anchor/damping
+            effective_pick_rate = 0.8 * raw_effective_pr + 0.2 * pick_rate_meta
+
+            # Combined Suggestion Score using the new formula with smooth pick rate penalty (scale = 0.005)
+            pr_multiplier = 1.0 - math.exp(-effective_pick_rate / 0.005) if effective_pick_rate > 0 else 0.0
+            combined_score = (score_a * score_b * score_c * score_e * pr_multiplier) + (0.15 * effective_pick_rate)
 
             suggestions.append({
                 "brawler": BrawlerSerializer(b).data,
@@ -149,7 +157,7 @@ class DraftSuggestionView(views.APIView):
                     "A_adjusted_win_rate": round(score_a, 4),
                     "B_matchup_factor": round(score_b, 4),
                     "C_synergy_factor": round(score_c, 4),
-                    "D_map_pick_rate": round(pick_rate_meta, 4),
+                    "D_meta_relevance": round(effective_pick_rate, 4),
                     "E_confidence_penalty": round(score_e, 4)
                 }
             })
