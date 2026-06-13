@@ -106,30 +106,39 @@ class DraftSuggestionView(views.APIView):
                 except Brawler.DoesNotExist:
                     continue
 
-                # Local perception check with game-mode filtering and averaging
-                perceptions = Perception.objects.filter(player=player, my_brawler=b, brawler_rival=enemy)
+                # Count total matches played as 'b' against 'enemy' (used as the denominator)
+                from django.db.models import Q
+                match_query = Match.objects.filter(
+                    player=player,
+                    my_brawler=b
+                ).filter(
+                    Q(draft_events__brawler=enemy, draft_events__team='enemy', draft_events__type='pick') |
+                    Q(perceptions__brawler_rival=enemy)
+                )
+                if target_map.mode:
+                    match_query = match_query.filter(mode=target_map.mode)
                 
-                # Filter by game mode first if any matching records exist (similar variable filter)
-                if perceptions.exists() and target_map.mode:
-                    mode_filtered = perceptions.filter(match__mode=target_map.mode)
-                    if mode_filtered.exists():
-                        perceptions = mode_filtered
+                games_count = match_query.distinct().count()
 
-                if perceptions.exists():
-                    from django.db.models import Avg
-                    avg_value = perceptions.aggregate(Avg('value'))['value__avg']
-                    if avg_value is not None:
-                        # Linear interpolation for rating (from -2.0 to 1.0)
-                        # -2.0 -> 0.65 (hard counter)
-                        # -1.0 -> 0.85 (hard)
-                        #  0.0 -> 1.00 (neutral)
-                        #  1.0 -> 1.15 (easy)
-                        if avg_value <= -1.0:
-                            factor = 0.85 + (avg_value - (-1.0)) * 0.20
-                        else:
-                            factor = 1.00 + avg_value * 0.15
+                # Sum the comfort level ratings (perceptions) for this matchup
+                perceptions = Perception.objects.filter(player=player, my_brawler=b, brawler_rival=enemy)
+                if target_map.mode:
+                    perceptions = perceptions.filter(match__mode=target_map.mode)
+
+                if games_count > 0:
+                    from django.db.models import Sum
+                    sum_value = perceptions.aggregate(Sum('value'))['value__sum'] or 0
+                    avg_value = sum_value / games_count
+                    
+                    # Linear interpolation for rating (from -2.0 to 1.0)
+                    # -2.0 -> 0.65 (hard counter)
+                    # -1.0 -> 0.85 (hard)
+                    #  0.0 -> 1.00 (neutral)
+                    #  1.0 -> 1.15 (easy)
+                    if avg_value <= -1.0:
+                        factor = 0.85 + (avg_value - (-1.0)) * 0.20
                     else:
-                        factor = 1.0
+                        factor = 1.00 + avg_value * 0.15
                 else:
                     # Meta matchup fallback
                     try:

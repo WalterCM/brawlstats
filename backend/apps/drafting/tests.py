@@ -281,3 +281,51 @@ class DraftAssistantTests(TestCase):
         self.assertEqual(response.status_code, 200)
         match.refresh_from_db()
         self.assertEqual(match.api_match_id, '20260613T211812.000Z')
+
+    def test_perception_neutral_value_is_deleted_or_not_saved(self):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+
+        # Create player, brawler, map, match
+        player = Player.objects.create(name="Walter Test", player_tag="#TESTTAG123", supabase_auth_id="django-user-999")
+        user = User.objects.create(username="user_999")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        brawler = self.shelly
+        rival = self.colt
+        map_obj = Map.objects.create(id="99", name="Whisper Vale", mode="gemGrab")
+        match = Match.objects.create(
+            player=player,
+            map=map_obj,
+            my_brawler=brawler,
+            mode="gemGrab",
+            result="victory",
+            draft_type="ranked"
+        )
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Create an initial easy perception
+        Perception.objects.create(
+            match=match,
+            player=player,
+            my_brawler=brawler,
+            brawler_rival=rival,
+            value=1
+        )
+        self.assertEqual(Perception.objects.filter(match=match, brawler_rival=rival).count(), 1)
+
+        # Send a POST payload with value=0 (neutral) to update it
+        url = reverse('perception-list')
+        payload = {
+            "match_id": match.id,
+            "brawler_rival_id": rival.id,
+            "value": 0
+        }
+        response = self.client.post(url, payload, content_type='application/json')
+        self.assertEqual(response.status_code, 201)
+
+        # Verify the perception record has been DELETED from the database
+        self.assertEqual(Perception.objects.filter(match=match, brawler_rival=rival).count(), 0)

@@ -28,6 +28,18 @@ class PerceptionSerializer(serializers.ModelSerializer):
         # Derive my_brawler from the match
         my_brawler = match.my_brawler
 
+        # If value is 0 (Neutral), we don't store it in the database.
+        # We delete any existing perception for this match and rival brawler.
+        if value == 0:
+            Perception.objects.filter(match=match, brawler_rival=brawler_rival).delete()
+            return Perception(
+                match=match,
+                player=player,
+                my_brawler=my_brawler,
+                brawler_rival=brawler_rival,
+                value=0
+            )
+
         # Upsert the perception record for this match and rival
         perception, created = Perception.objects.update_or_create(
             match=match,
