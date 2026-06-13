@@ -1,0 +1,437 @@
+[
+  {
+    "brawler_name": "Sam",
+    "win_rate": 0.542615,
+    "pick_rate": 0.005038
+  },
+  {
+    "brawler_name": "Doug",
+    "win_rate": 0.538923,
+    "pick_rate": 0.047115
+  },
+  {
+    "brawler_name": "Mr. P",
+    "win_rate": 0.537192,
+    "pick_rate": 0.047346
+  },
+  {
+    "brawler_name": "Bibi",
+    "win_rate": 0.533885,
+    "pick_rate": 0.088231
+  },
+  {
+    "brawler_name": "Frank",
+    "win_rate": 0.5295,
+    "pick_rate": 0.078077
+  },
+  {
+    "brawler_name": "Eve",
+    "win_rate": 0.525577,
+    "pick_rate": 0.025885
+  },
+  {
+    "brawler_name": "Carl",
+    "win_rate": 0.524769,
+    "pick_rate": 0.092846
+  },
+  {
+    "brawler_name": "Emz",
+    "win_rate": 0.5225,
+    "pick_rate": 0.161154
+  },
+  {
+    "brawler_name": "Buster",
+    "win_rate": 0.519692,
+    "pick_rate": 0.029538
+  },
+  {
+    "brawler_name": "R-T",
+    "win_rate": 0.519423,
+    "pick_rate": 0.024538
+  },
+  {
+    "brawler_name": "Rosa",
+    "win_rate": 0.513192,
+    "pick_rate": 0.009615
+  },
+  {
+    "brawler_name": "Juju",
+    "win_rate": 0.511385,
+    "pick_rate": 0.0405
+  },
+  {
+    "brawler_name": "Otis",
+    "win_rate": 0.510962,
+    "pick_rate": 0.051308
+  },
+  {
+    "brawler_name": "Ash",
+    "win_rate": 0.510577,
+    "pick_rate": 0.014231
+  },
+  {
+    "brawler_name": "Bull",
+    "win_rate": 0.508077,
+    "pick_rate": 0.052077
+  },
+  {
+    "brawler_name": "Bo",
+    "win_rate": 0.505346,
+    "pick_rate": 0.139077
+  },
+  {
+    "brawler_name": "Mico",
+    "win_rate": 0.504385,
+    "pick_rate": 0.086077
+  },
+  {
+    "brawler_name": "Grom",
+    "win_rate": 0.503192,
+    "pick_rate": 0.103231
+  },
+  {
+    "brawler_name": "Kenji",
+    "win_rate": 0.501192,
+    "pick_rate": 0.058308
+  },
+  {
+    "brawler_name": "Jacky",
+    "win_rate": 0.499577,
+    "pick_rate": 0.031346
+  },
+  {
+    "brawler_name": "Spike",
+    "win_rate": 0.499077,
+    "pick_rate": 0.212308
+  },
+  {
+    "brawler_name": "Cordelius",
+    "win_rate": 0.498769,
+    "pick_rate": 0.110692
+  },
+  {
+    "brawler_name": "Maisie",
+    "win_rate": 0.497846,
+    "pick_rate": 0.020692
+  },
+  {
+    "brawler_name": "Jessie",
+    "win_rate": 0.496654,
+    "pick_rate": 0.100615
+  },
+  {
+    "brawler_name": "Pearl",
+    "win_rate": 0.496615,
+    "pick_rate": 0.014308
+  },
+  {
+    "brawler_name": "Charlie",
+    "win_rate": 0.4965,
+    "pick_rate": 0.018269
+  },
+  {
+    "brawler_name": "Pam",
+    "win_rate": 0.496462,
+    "pick_rate": 0.009923
+  },
+  {
+    "brawler_name": "Lily",
+    "win_rate": 0.496038,
+    "pick_rate": 0.107462
+  },
+  {
+    "brawler_name": "Darryl",
+    "win_rate": 0.495692,
+    "pick_rate": 0.047231
+  },
+  {
+    "brawler_name": "Mortis",
+    "win_rate": 0.495115,
+    "pick_rate": 0.146269
+  },
+  {
+    "brawler_name": "Nita",
+    "win_rate": 0.495,
+    "pick_rate": 0.063308
+  },
+  {
+    "brawler_name": "Edgar",
+    "win_rate": 0.487962,
+    "pick_rate": 0.155308
+  },
+  {
+    "brawler_name": "Crow",
+    "win_rate": 0.486769,
+    "pick_rate": 0.144808
+  },
+  {
+    "brawler_name": "Penny",
+    "win_rate": 0.485,
+    "pick_rate": 0.078808
+  },
+  {
+    "brawler_name": "Janet",
+    "win_rate": 0.484577,
+    "pick_rate": 0.016923
+  },
+  {
+    "brawler_name": "Meg",
+    "win_rate": 0.483923,
+    "pick_rate": 0.012846
+  },
+  {
+    "brawler_name": "Tick",
+    "win_rate": 0.481731,
+    "pick_rate": 0.114577
+  },
+  {
+    "brawler_name": "Moe",
+    "win_rate": 0.480923,
+    "pick_rate": 0.011
+  },
+  {
+    "brawler_name": "Tara",
+    "win_rate": 0.479423,
+    "pick_rate": 0.067615
+  },
+  {
+    "brawler_name": "Glowbert",
+    "win_rate": 0.478792,
+    "pick_rate": 0.00475
+  },
+  {
+    "brawler_name": "Griff",
+    "win_rate": 0.478692,
+    "pick_rate": 0.088577
+  },
+  {
+    "brawler_name": "Poco",
+    "win_rate": 0.478538,
+    "pick_rate": 0.036346
+  },
+  {
+    "brawler_name": "Fang",
+    "win_rate": 0.477962,
+    "pick_rate": 0.090962
+  },
+  {
+    "brawler_name": "Hank",
+    "win_rate": 0.477654,
+    "pick_rate": 0.024769
+  },
+  {
+    "brawler_name": "Larry & Lawrie",
+    "win_rate": 0.4775,
+    "pick_rate": 0.026346
+  },
+  {
+    "brawler_name": "Leon",
+    "win_rate": 0.475115,
+    "pick_rate": 0.114115
+  },
+  {
+    "brawler_name": "Clancy",
+    "win_rate": 0.474692,
+    "pick_rate": 0.011115
+  },
+  {
+    "brawler_name": "Sandy",
+    "win_rate": 0.474692,
+    "pick_rate": 0.0305
+  },
+  {
+    "brawler_name": "Bonnie",
+    "win_rate": 0.474269,
+    "pick_rate": 0.0215
+  },
+  {
+    "brawler_name": "Rico",
+    "win_rate": 0.471615,
+    "pick_rate": 0.181462
+  },
+  {
+    "brawler_name": "Shelly",
+    "win_rate": 0.470769,
+    "pick_rate": 0.051577
+  },
+  {
+    "brawler_name": "Gale",
+    "win_rate": 0.469115,
+    "pick_rate": 0.065346
+  },
+  {
+    "brawler_name": "Chester",
+    "win_rate": 0.466615,
+    "pick_rate": 0.051423
+  },
+  {
+    "brawler_name": "El Primo",
+    "win_rate": 0.465808,
+    "pick_rate": 0.040923
+  },
+  {
+    "brawler_name": "Bea",
+    "win_rate": 0.4655,
+    "pick_rate": 0.059615
+  },
+  {
+    "brawler_name": "Ruffs",
+    "win_rate": 0.465231,
+    "pick_rate": 0.024538
+  },
+  {
+    "brawler_name": "Shade",
+    "win_rate": 0.465077,
+    "pick_rate": 0.044692
+  },
+  {
+    "brawler_name": "Draco",
+    "win_rate": 0.462962,
+    "pick_rate": 0.023077
+  },
+  {
+    "brawler_name": "8-Bit",
+    "win_rate": 0.462115,
+    "pick_rate": 0.020769
+  },
+  {
+    "brawler_name": "Gus",
+    "win_rate": 0.462,
+    "pick_rate": 0.098462
+  },
+  {
+    "brawler_name": "Stu",
+    "win_rate": 0.461885,
+    "pick_rate": 0.046231
+  },
+  {
+    "brawler_name": "Willow",
+    "win_rate": 0.459615,
+    "pick_rate": 0.020462
+  },
+  {
+    "brawler_name": "Chuck",
+    "win_rate": 0.459423,
+    "pick_rate": 0.029654
+  },
+  {
+    "brawler_name": "Buzz",
+    "win_rate": 0.459038,
+    "pick_rate": 0.049923
+  },
+  {
+    "brawler_name": "Surge",
+    "win_rate": 0.456962,
+    "pick_rate": 0.088115
+  },
+  {
+    "brawler_name": "Brock",
+    "win_rate": 0.456115,
+    "pick_rate": 0.201346
+  },
+  {
+    "brawler_name": "Squeak",
+    "win_rate": 0.455308,
+    "pick_rate": 0.133154
+  },
+  {
+    "brawler_name": "Colt",
+    "win_rate": 0.455269,
+    "pick_rate": 0.139923
+  },
+  {
+    "brawler_name": "Gray",
+    "win_rate": 0.452115,
+    "pick_rate": 0.0605
+  },
+  {
+    "brawler_name": "Byron",
+    "win_rate": 0.451654,
+    "pick_rate": 0.132923
+  },
+  {
+    "brawler_name": "Barley",
+    "win_rate": 0.450269,
+    "pick_rate": 0.042885
+  },
+  {
+    "brawler_name": "Dynamike",
+    "win_rate": 0.447769,
+    "pick_rate": 0.132231
+  },
+  {
+    "brawler_name": "Melodie",
+    "win_rate": 0.447462,
+    "pick_rate": 0.045577
+  },
+  {
+    "brawler_name": "Belle",
+    "win_rate": 0.446846,
+    "pick_rate": 0.055269
+  },
+  {
+    "brawler_name": "Lou",
+    "win_rate": 0.446846,
+    "pick_rate": 0.018731
+  },
+  {
+    "brawler_name": "Kit",
+    "win_rate": 0.446231,
+    "pick_rate": 0.067154
+  },
+  {
+    "brawler_name": "Amber",
+    "win_rate": 0.444654,
+    "pick_rate": 0.066654
+  },
+  {
+    "brawler_name": "Lola",
+    "win_rate": 0.444115,
+    "pick_rate": 0.005654
+  },
+  {
+    "brawler_name": "Max",
+    "win_rate": 0.443692,
+    "pick_rate": 0.018231
+  },
+  {
+    "brawler_name": "Angelo",
+    "win_rate": 0.436769,
+    "pick_rate": 0.055615
+  },
+  {
+    "brawler_name": "Berry",
+    "win_rate": 0.435077,
+    "pick_rate": 0.059038
+  },
+  {
+    "brawler_name": "Sprout",
+    "win_rate": 0.427423,
+    "pick_rate": 0.023077
+  },
+  {
+    "brawler_name": "Mandy",
+    "win_rate": 0.424538,
+    "pick_rate": 0.169115
+  },
+  {
+    "brawler_name": "Colette",
+    "win_rate": 0.424308,
+    "pick_rate": 0.036077
+  },
+  {
+    "brawler_name": "Nani",
+    "win_rate": 0.4145,
+    "pick_rate": 0.072654
+  },
+  {
+    "brawler_name": "Gene",
+    "win_rate": 0.410077,
+    "pick_rate": 0.050385
+  },
+  {
+    "brawler_name": "Piper",
+    "win_rate": 0.403038,
+    "pick_rate": 0.135654
+  }
+]

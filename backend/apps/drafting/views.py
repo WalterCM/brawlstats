@@ -52,14 +52,25 @@ class DraftSuggestionView(views.APIView):
 
             # Global Meta map win rate (fallback to global meta stats, fallback to 0.5)
             try:
-                meta_map = MetaMapStats.objects.get(brawler=b, map=target_map)
+                # Prioritize 'Diamond I+' trophy range (Ranked/Power League) and take the latest entry by date
+                meta_map = MetaMapStats.objects.filter(brawler=b, map=target_map, trophy_range='Diamond I+').latest('date')
                 win_rate_meta = meta_map.win_rate
             except MetaMapStats.DoesNotExist:
                 try:
-                    meta_brawler = MetaBrawlerStats.objects.filter(brawler=b).latest('date')
-                    win_rate_meta = meta_brawler.win_rate
-                except MetaBrawlerStats.DoesNotExist:
-                    win_rate_meta = 0.5
+                    # Fallback to '1000+'
+                    meta_map = MetaMapStats.objects.filter(brawler=b, map=target_map, trophy_range='1000+').latest('date')
+                    win_rate_meta = meta_map.win_rate
+                except MetaMapStats.DoesNotExist:
+                    try:
+                        # Fallback to any other trophy range if not found
+                        meta_map = MetaMapStats.objects.filter(brawler=b, map=target_map).latest('date')
+                        win_rate_meta = meta_map.win_rate
+                    except MetaMapStats.DoesNotExist:
+                        try:
+                            meta_brawler = MetaBrawlerStats.objects.filter(brawler=b).latest('date')
+                            win_rate_meta = meta_brawler.win_rate
+                        except MetaBrawlerStats.DoesNotExist:
+                            win_rate_meta = 0.5
 
             k_prior = 20.0
             alpha_prior = win_rate_meta * k_prior
