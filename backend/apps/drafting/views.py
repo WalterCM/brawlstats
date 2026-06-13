@@ -55,22 +55,28 @@ class DraftSuggestionView(views.APIView):
                 # Prioritize 'Diamond I+' trophy range (Ranked/Power League) and take the latest entry by date
                 meta_map = MetaMapStats.objects.filter(brawler=b, map=target_map, trophy_range='Diamond I+').latest('date')
                 win_rate_meta = meta_map.win_rate
+                pick_rate_meta = meta_map.pick_rate
             except MetaMapStats.DoesNotExist:
                 try:
                     # Fallback to '1000+'
                     meta_map = MetaMapStats.objects.filter(brawler=b, map=target_map, trophy_range='1000+').latest('date')
                     win_rate_meta = meta_map.win_rate
+                    pick_rate_meta = meta_map.pick_rate
                 except MetaMapStats.DoesNotExist:
                     try:
                         # Fallback to any other trophy range if not found
                         meta_map = MetaMapStats.objects.filter(brawler=b, map=target_map).latest('date')
                         win_rate_meta = meta_map.win_rate
+                        pick_rate_meta = meta_map.pick_rate
                     except MetaMapStats.DoesNotExist:
                         try:
+                            # Fallback to global brawler stats with reduced weight of 0.6
                             meta_brawler = MetaBrawlerStats.objects.filter(brawler=b).latest('date')
-                            win_rate_meta = meta_brawler.win_rate
+                            win_rate_meta = meta_brawler.win_rate * 0.6
+                            pick_rate_meta = 0.0
                         except MetaBrawlerStats.DoesNotExist:
-                            win_rate_meta = 0.5
+                            win_rate_meta = 0.5 * 0.6
+                            pick_rate_meta = 0.0
 
             k_prior = 20.0
             alpha_prior = win_rate_meta * k_prior
@@ -130,18 +136,11 @@ class DraftSuggestionView(views.APIView):
 
                 score_c *= factor
 
-            # --- 4. Component D: Meta Relevance ---
-            try:
-                meta_b = MetaBrawlerStats.objects.filter(brawler=b).latest('date')
-                score_d = meta_b.win_rate / 0.5
-            except MetaBrawlerStats.DoesNotExist:
-                score_d = 1.0
-
-            # --- 5. Component E: Confidence Penalty ---
+            # --- 4. Component E: Confidence Penalty ---
             score_e = 1.0 - 0.2 * math.exp(-games_player / 5.0)
 
-            # Combined Suggestion Score
-            combined_score = score_a * score_b * score_c * score_d * score_e
+            # Combined Suggestion Score using the new formula
+            combined_score = (score_a * score_b * score_c * score_e) + (0.15 * pick_rate_meta)
 
             suggestions.append({
                 "brawler": BrawlerSerializer(b).data,
@@ -150,7 +149,7 @@ class DraftSuggestionView(views.APIView):
                     "A_adjusted_win_rate": round(score_a, 4),
                     "B_matchup_factor": round(score_b, 4),
                     "C_synergy_factor": round(score_c, 4),
-                    "D_meta_relevance": round(score_d, 4),
+                    "D_map_pick_rate": round(pick_rate_meta, 4),
                     "E_confidence_penalty": round(score_e, 4)
                 }
             })
