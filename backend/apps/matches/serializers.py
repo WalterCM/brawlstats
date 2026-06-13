@@ -22,7 +22,7 @@ class MatchSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Match
-        fields = ['id', 'map_id', 'my_brawler_id', 'mode', 'result', 'draft_type', 'date', 'draft_events']
+        fields = ['id', 'map_id', 'my_brawler_id', 'mode', 'result', 'draft_type', 'date', 'draft_events', 'api_match_id']
         read_only_fields = ['id', 'date']
 
     def create(self, validated_data):
@@ -36,3 +36,19 @@ class MatchSerializer(serializers.ModelSerializer):
             DraftEvent.objects.create(match=match, **event_data)
             
         return match
+
+    def update(self, instance, validated_data):
+        draft_events_data = validated_data.pop('draft_events', None)
+        
+        # Update match primitive fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Update draft events: delete old events and create new ones
+        if draft_events_data is not None:
+            instance.draft_events.all().delete()
+            for event_data in draft_events_data:
+                DraftEvent.objects.create(match=instance, **event_data)
+                
+        return instance

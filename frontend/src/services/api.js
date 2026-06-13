@@ -42,6 +42,17 @@ export const api = {
     return res.json();
   },
 
+  // Update active player profile context
+  async updateMe(profilePayload) {
+    const res = await fetch(`${API_BASE_URL}/players/me/`, {
+      method: 'PATCH',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(profilePayload)
+    });
+    if (!res.ok) throw new Error('Failed to update player profile');
+    return res.json();
+  },
+
   // Fetch the Brawler Catalog
   async fetchBrawlers() {
     const res = await fetch(`${API_BASE_URL}/brawlers/`, {
@@ -65,7 +76,7 @@ export const api = {
   },
 
   // Fetch active suggestions based on picks/bans
-  async fetchSuggestions(mapId, alliesPicked, enemiesPicked, alliesBanned, enemiesBanned) {
+  async fetchSuggestions(mapId, alliesPicked, enemiesPicked, alliesBanned, enemiesBanned, enableTurns = true, activeTeam = 'allied', draftType = 'ranked') {
     const res = await fetch(`${API_BASE_URL}/draft/suggest/`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -74,10 +85,25 @@ export const api = {
         allies_picked: alliesPicked,
         enemies_picked: enemiesPicked,
         allies_banned: alliesBanned,
-        enemies_banned: enemiesBanned
+        enemies_banned: enemiesBanned,
+        enable_turns: enableTurns,
+        active_team: activeTeam,
+        draft_type: draftType
       })
     });
     if (!res.ok) throw new Error('Failed to fetch draft suggestions');
+    return res.json();
+  },
+
+  // Ingest last battle details from Brawl Stars API
+  async fetchLastBattle() {
+    const res = await fetch(`${API_BASE_URL}/draft/last-battle/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to fetch last battle');
+    }
     return res.json();
   },
 
@@ -92,6 +118,30 @@ export const api = {
     return res.json();
   },
 
+  // Update existing match logs
+  async updateMatch(matchId, matchPayload) {
+    const res = await fetch(`${API_BASE_URL}/matches/${matchId}/`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(matchPayload)
+    });
+    if (!res.ok) throw new Error('Failed to update match data');
+    return res.json();
+  },
+
+  // Link manually added match to Brawl Stars API log entry
+  async linkMatchAPI(matchId) {
+    const res = await fetch(`${API_BASE_URL}/matches/${matchId}/link-api/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to link match with API battle log');
+    }
+    return res.json();
+  },
+
   // Fetch match logs history
   async fetchMatches() {
     const res = await fetch(`${API_BASE_URL}/matches/`, {
@@ -101,12 +151,13 @@ export const api = {
     return res.json();
   },
 
-  // Save subjective perceptions
-  async savePerception(myBrawlerId, brawlerRivalId, value) {
+  // Save subjective perceptions linked to a match
+  async savePerception(matchId, myBrawlerId, brawlerRivalId, value) {
     const res = await fetch(`${API_BASE_URL}/perceptions/`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
+        match_id: matchId,
         my_brawler_id: myBrawlerId,
         brawler_rival_id: brawlerRivalId,
         value: value
@@ -149,6 +200,27 @@ export const api = {
     if (!res.ok) {
       const errData = await res.json();
       throw new Error(errData.error || 'Failed to register');
+    }
+    return res.json();
+  },
+
+  // Passwordless: Fetch all player profiles
+  async fetchPlayerList() {
+    const res = await fetch(`${API_BASE_URL}/players/list/`);
+    if (!res.ok) throw new Error('Failed to fetch player list');
+    return res.json();
+  },
+
+  // Passwordless: Access or register a player profile using only player_tag
+  async accessPlayerProfile(playerTag) {
+    const res = await fetch(`${API_BASE_URL}/players/access/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ player_tag: playerTag })
+    });
+    if (!res.ok) {
+      const errData = await res.json();
+      throw new Error(errData.error || 'Failed to access player profile');
     }
     return res.json();
   }

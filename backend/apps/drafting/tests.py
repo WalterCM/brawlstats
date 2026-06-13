@@ -3,7 +3,7 @@ from django.urls import reverse
 from apps.core.models import Player, Brawler, Map
 from apps.matches.models import Match, DraftEvent
 from apps.drafting.models import Perception
-from apps.brawlers.models import MetaBrawlerStats, MetaMatchup, MetaMapStats
+from unittest.mock import patch
 
 class DraftAssistantTests(TestCase):
     def setUp(self):
@@ -106,8 +106,13 @@ class DraftAssistantTests(TestCase):
     def test_perception_upsert(self):
         # Authenticate
         self.client.get(reverse('player-me'), **self.auth_headers)
+        player = Player.objects.get(supabase_auth_id='supabase-test-uid-123')
+        
+        # Create a match
+        match = Match.objects.create(player=player, map=self.stone_fort, my_brawler=self.shelly, mode="Gem Grab", result="victory")
 
         payload = {
+            "match_id": match.id,
             "my_brawler_id": self.shelly.id,
             "brawler_rival_id": self.bull.id,
             "value": -2  # Counter
@@ -135,3 +140,144 @@ class DraftAssistantTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(Perception.objects.count(), 1)
         self.assertEqual(Perception.objects.first().value, 1)
+
+    def test_draft_suggestions_with_mode_filtered_perceptions(self):
+        # Authenticate
+        self.client.get(reverse('player-me'), **self.auth_headers)
+        player = Player.objects.get(supabase_auth_id='supabase-test-uid-123')
+
+        # Create two maps: Gem Grab (same mode as draft) and Brawl Ball (different mode)
+        gem_grab_map = self.stone_fort  # Gem Grab
+        brawl_ball_map = Map.objects.create(id="15000002", name="Sneaky Fields", mode="Brawl Ball", is_ranked=True)
+
+        # Create matches
+        m_gem_grab = Match.objects.create(player=player, map=gem_grab_map, my_brawler=self.shelly, mode="Gem Grab", result="victory")
+        m_brawl_ball = Match.objects.create(player=player, map=brawl_ball_map, my_brawler=self.shelly, mode="Brawl Ball", result="victory")
+
+        # Create perceptions for Shelly vs Colt
+        # 1. Gem Grab perception: Shelly vs Colt is Easy (1)
+        Perception.objects.create(match=m_gem_grab, player=player, my_brawler=self.shelly, brawler_rival=self.colt, value=1)
+        # 2. Brawl Ball perception: Shelly vs Colt is Counter (-2)
+        Perception.objects.create(match=m_brawl_ball, player=player, my_brawler=self.shelly, brawler_rival=self.colt, value=-2)
+
+        # Suggest for Gem Grab map -> Should filter and only use Gem Grab perception (value=1 -> factor=1.15)
+        payload = {
+            "map_id": gem_grab_map.id,
+            "allies_picked": [],
+            "enemies_picked": [self.colt.id],
+            "allies_banned": [],
+            "enemies_banned": []
+        }
+        response = self.client.post(
+            reverse('draft-suggest'),
+            payload,
+            content_type='application/json',
+            **self.auth_headers
+        )
+        self.assertEqual(response.status_code, 200)
+        suggestions = response.json()['suggestions']
+        shelly_score_gem_grab = next(item for item in suggestions if item['brawler']['id'] == self.shelly.id)['score']
+
+        # Suggest for a different map (e.g. Brawl Ball map) -> Should filter and use Brawl Ball perception (value=-2 -> factor=0.65)
+        payload["map_id"] = brawl_ball_map.id
+        response = self.client.post(
+            reverse('draft-suggest'),
+            payload,
+            content_type='application/json',
+            **self.auth_headers
+        )
+        self.assertEqual(response.status_code, 200)
+        suggestions2 = response.json()['suggestions']
+        shelly_score_brawl_ball = next(item for item in suggestions2 if item['brawler']['id'] == self.shelly.id)['score']
+
+        # Shelly should have a significantly higher score in Gem Grab than Brawl Ball due to perception filtering
+        self.assertGreater(shelly_score_gem_grab, shelly_score_brawl_ball)
+
+    @patch('requests.get')
+    def test_passwordless_access_existing_player(self, mock_get):
+        # Mock requests.get response
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'name': 'Walter Test',
+            'tag': '#TESTTAG123'
+        }
+
+        # Create a player with a tag
+        player = Player.objects.create(name="Walter Test", player_tag="#TESTTAG123", supabase_auth_id="some-id")
+
+        # Access via player_tag
+        payload = {
+            "player_tag": "#TESTTAG123"
+        }
+        response = self.client.post(
+            reverse('player-access'),
+            payload,
+            content_type='application/json'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('token', data)
+        self.assertEqual(data['username'], 'Walter Test')
+        self.assertEqual(data['player_tag'], '#TESTTAG123')
+
+        # Test list view includes this player
+        list_response = self.client.get(reverse('player-list'))
+        self.assertEqual(list_response.status_code, 200)
+        list_data = list_response.json()
+        self.assertTrue(any(p['player_tag'] == '#TESTTAG123' for p in list_data))
+
+    @patch('requests.get')
+    def test_link_api_match(self, mock_get):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+
+        # Setup mock BS API response for battle log
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'items': [
+                {
+                    'battleTime': '20260613T211812.000Z',
+                    'event': {'map': 'Whisper Vale'},
+                    'battle': {
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {
+                                    'tag': '#TESTTAG123',
+                                    'brawler': {'id': 16000000, 'name': 'LEON'}
+                                }
+                            ],
+                            []
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # Create player, brawler, map, and a manual unlinked match
+        player = Player.objects.create(name="Walter Test", player_tag="#TESTTAG123", supabase_auth_id="django-user-999")
+        user = User.objects.create(username="user_999")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        brawler = Brawler.objects.create(id="16000022", name="LEON")
+        map_obj = Map.objects.create(id="99", name="Whisper Vale", mode="gemGrab")
+        match = Match.objects.create(
+            player=player,
+            map=map_obj,
+            my_brawler=brawler,
+            mode="gemGrab",
+            result="victory",
+            draft_type="ranked"
+        )
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Call link-api endpoint
+        url = reverse('match-detail', kwargs={'pk': match.id}) + 'link-api/'
+        response = self.client.post(url)
+        
+        self.assertEqual(response.status_code, 200)
+        match.refresh_from_db()
+        self.assertEqual(match.api_match_id, '20260613T211812.000Z')

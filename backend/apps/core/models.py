@@ -3,6 +3,8 @@ from django.db import models
 class Player(models.Model):
     name = models.CharField(max_length=100)
     supabase_auth_id = models.CharField(max_length=255, unique=True, db_index=True)
+    player_tag = models.CharField(max_length=50, blank=True, null=True)
+    avatar_id = models.IntegerField(blank=True, null=True)
 
     def __str__(self):
         return f"{self.name} ({self.supabase_auth_id[:8]})"

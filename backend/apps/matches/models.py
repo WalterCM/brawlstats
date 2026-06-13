@@ -9,6 +9,7 @@ class Match(models.Model):
     result = models.CharField(max_length=20)  # victory / defeat
     draft_type = models.CharField(max_length=20, default='normal')  # normal / ranked
     date = models.DateTimeField(auto_now_add=True)
+    api_match_id = models.CharField(max_length=100, null=True, blank=True)
 
     def __str__(self):
         return f"Match {self.id} - {self.player.name} as {self.my_brawler.name if self.my_brawler else 'Unknown'} ({self.result})"
