@@ -4,7 +4,7 @@ from apps.core.models import Player, Brawler, Map
 class PlayerSerializer(serializers.ModelSerializer):
     class Meta:
         model = Player
-        fields = ['id', 'name', 'supabase_auth_id', 'player_tag', 'avatar_id']
+        fields = ['id', 'name', 'supabase_auth_id', 'player_tag', 'avatar_id', 'min_normal_trophies']
 
 class BrawlerSerializer(serializers.ModelSerializer):
     class Meta:

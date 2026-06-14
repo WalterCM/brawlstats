@@ -34,6 +34,21 @@ function App() {
   const [selectedMap, setSelectedMap] = useState(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const [mapFilterMode, setMapFilterMode] = useState('All');
+  const [modalAlert, setModalAlert] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'info'
+  });
+
+  const triggerAlert = (title, message, type = 'info') => {
+    setModalAlert({
+      isOpen: true,
+      title,
+      message,
+      type
+    });
+  };
   const [draftType, setDraftType] = useState('ranked'); // 'ranked' or 'normal'
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
   const [firstPickTeam, setFirstPickTeam] = useState('allies'); // 'allies' or 'enemies'
@@ -69,6 +84,11 @@ function App() {
   const [apiMatchId, setApiMatchId] = useState(null);
   const [syncingHistory, setSyncingHistory] = useState(false);
 
+  const [minNormalTrophies, setMinNormalTrophies] = useState(750);
+  const [suggestionTrophyThreshold, setSuggestionTrophyThreshold] = useState(1000);
+  const [myBrawlerTrophies, setMyBrawlerTrophies] = useState(null);
+  const [isStarPlayer, setIsStarPlayer] = useState(false);
+
   const [profileName, setProfileName] = useState('');
   const [profileTag, setProfileTag] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
@@ -101,6 +121,7 @@ function App() {
     if (me) {
       setProfileName(me.name || '');
       setProfileTag(me.player_tag || '');
+      setMinNormalTrophies(me.min_normal_trophies !== undefined && me.min_normal_trophies !== null ? me.min_normal_trophies : 750);
     }
   }, [me]);
 
@@ -111,7 +132,8 @@ function App() {
     try {
       const updated = await api.updateMe({
         name: profileName,
-        player_tag: profileTag
+        player_tag: profileTag,
+        min_normal_trophies: minNormalTrophies
       });
       setMe(updated);
       setProfileSuccess(true);
@@ -145,7 +167,7 @@ function App() {
     } else {
       setSuggestions([]);
     }
-  }, [draft, selectedMap, currentUser, backendConnected, enableTurns, activeSlot]);
+  }, [draft, selectedMap, currentUser, backendConnected, enableTurns, activeSlot, suggestionTrophyThreshold]);
 
   const loadCatalogs = async () => {
     if (!currentUser) return;
@@ -228,7 +250,8 @@ function App() {
         enemiesBanned,
         draftType === 'ranked' ? enableTurns : false,
         activeTeam,
-        draftType
+        draftType,
+        suggestionTrophyThreshold
       );
       setSuggestions(res.suggestions || []);
     } catch (err) {
@@ -440,6 +463,8 @@ function App() {
       enemies_picked: [null, null, null],
     });
     setApiMatchId(null);
+    setMyBrawlerTrophies(null);
+    setIsStarPlayer(false);
     const steps = getDraftSteps(type, firstPick, bansEnabled);
     if (steps.length > 0) {
       setActiveSlot({ type: steps[0].type, index: steps[0].index });
@@ -466,7 +491,9 @@ function App() {
       const data = await api.fetchLastBattle();
       
       setSelectedMap(data.map);
-      if (data.map && data.map.is_ranked) {
+      if (data.draft_type) {
+        setDraftType(data.draft_type);
+      } else if (data.map && data.map.is_ranked) {
         setDraftType('ranked');
       } else {
         setDraftType('normal');
@@ -489,6 +516,8 @@ function App() {
       setMyBrawler(data.my_brawler);
       setMatchResult(data.result);
       setApiMatchId(data.api_match_id);
+      setMyBrawlerTrophies(data.my_brawler_trophies !== undefined ? data.my_brawler_trophies : null);
+      setIsStarPlayer(data.is_star_player !== undefined ? data.is_star_player : false);
 
       const initialPerceptions = {};
       data.enemies_picked.filter(Boolean).forEach((enemy, idx) => {
@@ -499,7 +528,7 @@ function App() {
       setShowMatchLogger(true);
     } catch (err) {
       console.error(err);
-      alert(err.message || "Failed to ingest last battle from API.");
+      triggerAlert("Ingest Battle Failed", err.message || "Failed to ingest last battle from API.", "error");
     } finally {
       setIngesting(false);
     }
@@ -509,11 +538,11 @@ function App() {
     setSyncingHistory(true);
     try {
       const res = await api.syncMatchesAPI();
-      alert(res.message || "Matches synchronized successfully!");
+      triggerAlert("Synchronization Successful", res.message || `Successfully synchronized ${res.synced_count || 0} new matches!`, "success");
       await loadUserStats();
     } catch (err) {
       console.error(err);
-      alert(err.message || "Failed to synchronize matches.");
+      triggerAlert("Synchronization Failed", err.message || "Failed to synchronize matches.", "error");
     } finally {
       setSyncingHistory(false);
     }
@@ -598,7 +627,9 @@ function App() {
         result: matchResult,
         draft_type: draftType,
         draft_events: [],
-        api_match_id: apiMatchId
+        api_match_id: apiMatchId,
+        my_brawler_trophies: myBrawlerTrophies,
+        is_star_player: isStarPlayer
       };
 
       let order = 1;
@@ -638,10 +669,18 @@ function App() {
       setEditingMatchId(null);
       resetDraft();
       loadUserStats();
-      alert(editingMatchId ? "Match data and matchup perceptions updated successfully!" : "Match and matchup perceptions logged successfully!");
+      triggerAlert(
+        editingMatchId ? "Match Updated" : "Match Logged", 
+        editingMatchId ? "Match data and matchup perceptions updated successfully!" : "Match and matchup perceptions logged successfully!", 
+        "success"
+      );
     } catch (err) {
       console.error(err);
-      alert(editingMatchId ? "Failed to update match logs." : "Failed to save match logs.");
+      triggerAlert(
+        "Save Failed", 
+        editingMatchId ? "Failed to update match logs." : "Failed to save match logs.", 
+        "error"
+      );
     }
   };
 
@@ -1082,10 +1121,10 @@ function App() {
                               if (confirm("Do you want to link this match with your latest unlinked game from the Brawl Stars API?")) {
                                 try {
                                   await api.linkMatchAPI(m.id);
-                                  alert("Match linked successfully with Brawl Stars API match ID!");
+                                  triggerAlert("Link Successful", "Match linked successfully with Brawl Stars API match ID!", "success");
                                   loadUserStats();
                                 } catch (err) {
-                                  alert(err.message || "Failed to link match with API.");
+                                  triggerAlert("Link Failed", err.message || "Failed to link match with API.", "error");
                                 }
                               }
                             }}
@@ -1509,6 +1548,42 @@ function App() {
           <h2>Suggestions</h2>
           <p className="suggestions-meta">Powered by Bayesian Smoothing</p>
 
+          <div style={{
+            background: 'rgba(0, 0, 0, 0.2)',
+            border: '1px solid var(--border-glass)',
+            borderRadius: '8px',
+            padding: '10px 14px',
+            marginBottom: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '6px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '11px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Matchup Trophy Threshold</span>
+              <span style={{ fontSize: '13px', fontWeight: '800', color: 'var(--color-ally)' }}>{suggestionTrophyThreshold}🏆+</span>
+            </div>
+            <input 
+              type="range" 
+              min="0" 
+              max="1250" 
+              step="50"
+              value={suggestionTrophyThreshold} 
+              onChange={(e) => setSuggestionTrophyThreshold(parseInt(e.target.value))}
+              style={{
+                accentColor: 'var(--color-ally)',
+                background: 'rgba(255,255,255,0.1)',
+                height: '4px',
+                borderRadius: '2px',
+                outline: 'none',
+                cursor: 'pointer',
+                width: '100%'
+              }}
+            />
+            <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', lineHeight: '1.3' }}>
+              Only analyzes normal matches played at/above this trophy level. (Ranked games always pass).
+            </span>
+          </div>
+
           <div className="suggestions-list">
             {suggestions.map((item, index) => (
               <div
@@ -1605,6 +1680,32 @@ function App() {
                 />
                 <small style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
                   This tag will be used to automatically ingest your battles from the official Brawl Stars API.
+                </small>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Min Ingest Trophies (Normal Matches)</label>
+                  <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-ally)' }}>{minNormalTrophies} 🏆</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="1250" 
+                  step="50"
+                  value={minNormalTrophies} 
+                  onChange={(e) => setMinNormalTrophies(parseInt(e.target.value))}
+                  style={{
+                    accentColor: 'var(--color-ally)',
+                    background: 'rgba(0, 0, 0, 0.25)',
+                    height: '6px',
+                    borderRadius: '3px',
+                    outline: 'none',
+                    cursor: 'pointer'
+                  }}
+                />
+                <small style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
+                  Normal matches will only be auto-imported if your brawler has at least this many trophies (unless you already played a ranked match with that brawler).
                 </small>
               </div>
 
@@ -1978,6 +2079,87 @@ function App() {
                     </div>
                   ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Premium Custom Alert Modal */}
+      {modalAlert.isOpen && (
+        <div 
+          className="modal-backdrop" 
+          style={{ 
+            animation: 'fadeIn 0.25s ease-out',
+            zIndex: 1000 
+          }}
+          onClick={() => setModalAlert(prev => ({ ...prev, isOpen: false }))}
+        >
+          <div 
+            className="modal-content glass-panel" 
+            style={{ 
+              maxWidth: '400px', 
+              textAlign: 'center', 
+              padding: '30px 24px',
+              animation: 'slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
+              background: 'rgba(20, 20, 30, 0.95)',
+              border: '1px solid var(--border-glass)',
+              borderRadius: '16px',
+              boxShadow: '0 20px 40px rgba(0,0,0,0.6)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+              <div 
+                style={{ 
+                  width: '60px', 
+                  height: '60px', 
+                  borderRadius: '50%', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  fontSize: '24px',
+                  background: modalAlert.type === 'success' 
+                    ? 'rgba(46, 213, 115, 0.15)' 
+                    : modalAlert.type === 'error'
+                    ? 'rgba(255, 71, 87, 0.15)'
+                    : 'rgba(30, 144, 255, 0.15)',
+                  border: `2px solid ${
+                    modalAlert.type === 'success' 
+                      ? '#2ed573' 
+                      : modalAlert.type === 'error'
+                      ? '#ff4757'
+                      : '#1e90ff'
+                  }`,
+                  color: modalAlert.type === 'success' 
+                    ? '#2ed573' 
+                    : modalAlert.type === 'error'
+                    ? '#ff4757'
+                    : '#1e90ff'
+                }}
+              >
+                {modalAlert.type === 'success' ? '✓' : modalAlert.type === 'error' ? '✕' : 'ℹ'}
+              </div>
+              <h2 style={{ margin: 0, fontSize: '20px', color: '#fff', borderBottom: 'none', paddingBottom: 0 }}>
+                {modalAlert.title}
+              </h2>
+              <p style={{ margin: 0, fontSize: '14px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5' }}>
+                {modalAlert.message}
+              </p>
+              <button 
+                className="btn btn-primary" 
+                style={{ 
+                  marginTop: '10px',
+                  padding: '10px 30px', 
+                  borderRadius: '24px',
+                  fontWeight: 600,
+                  fontSize: '14px',
+                  letterSpacing: '0.5px',
+                  width: 'auto'
+                }}
+                onClick={() => setModalAlert(prev => ({ ...prev, isOpen: false }))}
+              >
+                Dismiss
+              </button>
             </div>
           </div>
         </div>

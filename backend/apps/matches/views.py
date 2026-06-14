@@ -225,6 +225,11 @@ class MatchViewSet(viewsets.ModelViewSet):
                 if not db_map:
                     continue
 
+                allowed_modes = {'gemgrab', 'brawlball', 'heist', 'hotzone', 'knockout', 'bounty'}
+                normalized_mode = db_map.mode.lower().replace(' ', '').replace('_', '').replace('-', '')
+                if normalized_mode not in allowed_modes:
+                    continue
+
                 # Resolve My Brawler from DB catalog
                 my_brawler_id = str(my_brawler_api.get('id'))
                 my_brawler = Brawler.objects.filter(id=my_brawler_id).first()
@@ -235,7 +240,25 @@ class MatchViewSet(viewsets.ModelViewSet):
 
                 raw_result = battle.get('result', 'defeat')
                 result = 'victory' if raw_result == 'victory' else 'defeat'
-                draft_type = 'ranked' if db_map.is_ranked else 'normal'
+                
+                battle_type = battle.get('type', '')
+                if battle_type:
+                    draft_type = 'ranked' if battle_type in ('soloRanked', 'teamRanked') else 'normal'
+                else:
+                    draft_type = 'ranked' if db_map.is_ranked else 'normal'
+
+                # Parse trophies and star player status
+                my_brawler_trophies = my_brawler_api.get('trophies', 0) or 0
+                star_player_api = battle.get('starPlayer')
+                star_player_tag = star_player_api.get('tag', '') if star_player_api else ''
+                is_star_player = star_player_tag.replace('#', '').upper() == normalized_player_tag
+
+                # Apply Ingestion filters for Normal matches
+                if draft_type == 'normal':
+                    min_trophies = getattr(request.player, 'min_normal_trophies', 750)
+                    has_ranked_match = Match.objects.filter(player=request.player, my_brawler=my_brawler, draft_type='ranked').exists()
+                    if my_brawler_trophies < min_trophies and not has_ranked_match:
+                        continue
 
                 # Create the Match
                 match = Match.objects.create(
@@ -245,7 +268,9 @@ class MatchViewSet(viewsets.ModelViewSet):
                     mode=db_map.mode,
                     result=result,
                     draft_type=draft_type,
-                    api_match_id=battle_time
+                    api_match_id=battle_time,
+                    my_brawler_trophies=my_brawler_trophies,
+                    is_star_player=is_star_player
                 )
 
                 # Create DraftEvents for allied and enemy brawler picks
@@ -279,6 +304,11 @@ class MatchViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_200_OK
             )
 
+        except requests.RequestException as req_err:
+            return Response(
+                {"error": f"Brawl Stars API connection error or timeout. Please check your internet connection and ensure your API key matches your current IP address. Details: {str(req_err)}"},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
         except Exception as e:
             return Response(
                 {"error": f"An error occurred while syncing matches: {str(e)}"},

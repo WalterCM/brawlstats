@@ -22,7 +22,7 @@ class MatchSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Match
-        fields = ['id', 'map_id', 'my_brawler_id', 'mode', 'result', 'draft_type', 'date', 'draft_events', 'api_match_id']
+        fields = ['id', 'map_id', 'my_brawler_id', 'mode', 'result', 'draft_type', 'date', 'draft_events', 'api_match_id', 'my_brawler_trophies', 'is_star_player']
         read_only_fields = ['id', 'date']
 
     def create(self, validated_data):

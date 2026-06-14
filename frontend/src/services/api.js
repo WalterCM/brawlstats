@@ -76,7 +76,7 @@ export const api = {
   },
 
   // Fetch active suggestions based on picks/bans
-  async fetchSuggestions(mapId, alliesPicked, enemiesPicked, alliesBanned, enemiesBanned, enableTurns = true, activeTeam = 'allied', draftType = 'ranked') {
+  async fetchSuggestions(mapId, alliesPicked, enemiesPicked, alliesBanned, enemiesBanned, enableTurns = true, activeTeam = 'allied', draftType = 'ranked', minTrophies = 1000) {
     const res = await fetch(`${API_BASE_URL}/draft/suggest/`, {
       method: 'POST',
       headers: getAuthHeaders(),
@@ -88,7 +88,8 @@ export const api = {
         enemies_banned: enemiesBanned,
         enable_turns: enableTurns,
         active_team: activeTeam,
-        draft_type: draftType
+        draft_type: draftType,
+        min_trophies: minTrophies
       })
     });
     if (!res.ok) throw new Error('Failed to fetch draft suggestions');

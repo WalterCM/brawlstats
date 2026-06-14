@@ -384,3 +384,369 @@ class DraftAssistantTests(TestCase):
         self.assertEqual(match.map, map_obj)
         self.assertEqual(match.my_brawler, self.shelly)
         self.assertEqual(match.draft_events.count(), 6)
+
+    @patch('requests.get')
+    def test_sync_api_trophy_filtering(self, mock_get):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+
+        # Set player to ignore normal matches under 800 trophies
+        player = Player.objects.create(
+            name="Trophy Test Player", 
+            player_tag="#TROPHYTAG", 
+            supabase_auth_id="django-user-888",
+            min_normal_trophies=800
+        )
+        user = User.objects.create(username="user_888")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        # Mock two normal battles from API:
+        # Match A: Shelly, 500 trophies (should be skipped since 500 < 800 and no prior ranked match)
+        # Match B: Colt, 900 trophies (should be imported since 900 >= 800)
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'items': [
+                {
+                    'battleTime': '20260613T211812.000Z',
+                    'event': {'map': 'Whisper Vale'},
+                    'battle': {
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#TROPHYTAG', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY', 'trophies': 500}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                },
+                {
+                    'battleTime': '20260613T221812.000Z',
+                    'event': {'map': 'Whisper Vale'},
+                    'battle': {
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#TROPHYTAG', 'brawler': {'id': self.colt.id, 'name': 'COLT', 'trophies': 900}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}}
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # Create normal/unranked map in catalog
+        map_obj = Map.objects.create(id="88", name="Whisper Vale", mode="gemGrab", is_ranked=False)
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Call sync-api endpoint
+        url = reverse('match-list') + 'sync-api/'
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        # Only 1 match (the Colt one) should be synced
+        self.assertEqual(response.json()['synced_count'], 1)
+
+        self.assertTrue(Match.objects.filter(player=player, my_brawler=self.colt).exists())
+        self.assertFalse(Match.objects.filter(player=player, my_brawler=self.shelly).exists())
+
+    def test_draft_suggestions_trophy_filtering(self):
+        # Authenticate player
+        self.client.get(reverse('player-me'), **self.auth_headers)
+        player = Player.objects.get(supabase_auth_id='supabase-test-uid-123')
+
+        # Create normal matches with different trophies
+        Match.objects.create(player=player, map=self.stone_fort, my_brawler=self.shelly, result='victory', draft_type='normal', my_brawler_trophies=1200)
+        Match.objects.create(player=player, map=self.stone_fort, my_brawler=self.colt, result='victory', draft_type='normal', my_brawler_trophies=500)
+
+        # Call DraftSuggestionView with min_trophies = 1000
+        url = reverse('draft-suggest')
+        data = {
+            'map_id': self.stone_fort.id,
+            'allies_picked': [],
+            'enemies_picked': [],
+            'allies_banned': [],
+            'enemies_banned': [],
+            'draft_type': 'normal',
+            'min_trophies': 1000
+        }
+        response = self.client.post(url, data, format='json', **self.auth_headers)
+        self.assertEqual(response.status_code, 200)
+
+        suggestions = response.json()['suggestions']
+        # Shelly should have higher score since her 1200 trophy match is counted, while Colt's 500 trophy match is filtered out
+        shelly_sug = next(s for s in suggestions if s['brawler']['id'] == self.shelly.id)
+        colt_sug = next(s for s in suggestions if s['brawler']['id'] == self.colt.id)
+        self.assertGreater(shelly_sug['score'], colt_sug['score'])
+
+    @patch('requests.get')
+    def test_sync_api_mode_filtering(self, mock_get):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+
+        # Create player, user
+        player = Player.objects.create(name="Mode Test Player", player_tag="#MODETAG", supabase_auth_id="django-user-777")
+        user = User.objects.create(username="user_777")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        # Setup mock BS API response: 1 Gem Grab match (should sync) and 1 Basket Brawl match (should be skipped)
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'items': [
+                {
+                    'battleTime': '20260613T211812.000Z',
+                    'event': {'map': 'Whisper Vale'},
+                    'battle': {
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#MODETAG', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY', 'trophies': 900}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                },
+                {
+                    'battleTime': '20260613T221812.000Z',
+                    'event': {'map': 'Ball Hog'},
+                    'battle': {
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#MODETAG', 'brawler': {'id': self.colt.id, 'name': 'COLT', 'trophies': 900}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}}
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # Create maps in catalog
+        map_gem = Map.objects.create(id="99", name="Whisper Vale", mode="gemGrab", is_ranked=True)
+        map_basket = Map.objects.create(id="101", name="Ball Hog", mode="Basket Brawl", is_ranked=False)
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Call sync-api endpoint
+        url = reverse('match-list') + 'sync-api/'
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        # Only the Gem Grab match should be synced
+        self.assertEqual(response.json()['synced_count'], 1)
+
+        self.assertTrue(Match.objects.filter(player=player, map=map_gem).exists())
+        self.assertFalse(Match.objects.filter(player=player, map=map_basket).exists())
+
+    @patch('requests.get')
+    def test_sync_api_draft_type_resolution(self, mock_get):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+
+        # Set player to ignore normal matches under 750 trophies
+        player = Player.objects.create(
+            name="Draft Type Player", 
+            player_tag="#DRAFTTAG", 
+            supabase_auth_id="django-user-666",
+            min_normal_trophies=750
+        )
+        user = User.objects.create(username="user_666")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        # Mock two battles:
+        # Match A: played on a map that is ranked, but type="ranked" (trophy match) and brawler has 500 trophies (should be filtered out because it is normal)
+        # Match B: played on the same map, type="soloRanked" (ranked mode match) and brawler has 500 trophies (should be imported because it is ranked mode)
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'items': [
+                {
+                    'battleTime': '20260613T211812.000Z',
+                    'event': {'map': 'Whisper Vale'},
+                    'battle': {
+                        'type': 'ranked', # Normal trophy match
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#DRAFTTAG', 'brawler': {'id': self.colt.id, 'name': 'COLT', 'trophies': 500}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}}
+                            ]
+                        ]
+                    }
+                },
+                {
+                    'battleTime': '20260613T221812.000Z',
+                    'event': {'map': 'Whisper Vale'},
+                    'battle': {
+                        'type': 'soloRanked', # Ranked match
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#DRAFTTAG', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY', 'trophies': 500}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # Create map in catalog (marked as is_ranked=True)
+        map_obj = Map.objects.create(id="99", name="Whisper Vale", mode="gemGrab", is_ranked=True)
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Call sync-api endpoint
+        url = reverse('match-list') + 'sync-api/'
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        
+        # Only the second match (soloRanked) should be synced
+        self.assertEqual(response.json()['synced_count'], 1)
+
+        # Verify the only synced match in the database has draft_type = 'ranked'
+        self.assertEqual(Match.objects.filter(player=player).count(), 1)
+        match = Match.objects.get(player=player)
+        self.assertEqual(match.draft_type, 'ranked')
+        self.assertEqual(match.api_match_id, '20260613T221812.000Z')
+
+    @patch('requests.get')
+    def test_last_battle_ingest_filters(self, mock_get):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+
+        # Set player to ignore normal matches under 750 trophies
+        player = Player.objects.create(
+            name="Ingest Filter Player", 
+            player_tag="#INGESTTAG", 
+            supabase_auth_id="django-user-555",
+            min_normal_trophies=750
+        )
+        user = User.objects.create(username="user_555")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        # Mock two battles in player's history:
+        # 1. Match A (most recent, index 0): normal match with 500 trophies (should be skipped because of the 750 trophies filter)
+        # 2. Match B (older, index 1): normal match with 800 trophies (should be selected because it passes the filter)
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'items': [
+                {
+                    'battleTime': '20260614T010000.000Z',
+                    'event': {'map': 'Whisper Vale'},
+                    'battle': {
+                        'type': 'ranked', # Normal match
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#INGESTTAG', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY', 'trophies': 500}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                },
+                {
+                    'battleTime': '20260614T005000.000Z',
+                    'event': {'map': 'Whisper Vale'},
+                    'battle': {
+                        'type': 'ranked', # Normal match
+                        'result': 'defeat',
+                        'teams': [
+                            [
+                                {'tag': '#INGESTTAG', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY', 'trophies': 800}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # Create map in catalog
+        map_obj = Map.objects.create(id="99", name="Whisper Vale", mode="gemGrab", is_ranked=True)
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Call the last-battle endpoint
+        url = reverse('last-battle-ingest')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify it picked Match B (battleTime '20260614T005000.000Z', result 'defeat')
+        self.assertEqual(response.json()['api_match_id'], '20260614T005000.000Z')
+        self.assertEqual(response.json()['result'], 'defeat')
+
+        # Now, create that match in the database to simulate that it is already recorded
+        Match.objects.create(
+            player=player,
+            map=map_obj,
+            my_brawler=self.shelly,
+            result='defeat',
+            api_match_id='20260614T005000.000Z',
+            draft_type='normal',
+            my_brawler_trophies=800
+        )
+
+        # Call last-battle again. It should fail with a 400 Bad Request because the match is already recorded.
+        response2 = self.client.get(url)
+        self.assertEqual(response2.status_code, 400)
+        self.assertIn("already recorded", response2.json()['error'])
+
+
+
+
