@@ -140,10 +140,17 @@ class DraftSuggestionView(views.APIView):
                 if target_map.mode:
                     perceptions = perceptions.filter(match__mode=target_map.mode)
 
-                if games_count > 0:
+                # Fetch meta matchup win rate for fallback/prior
+                try:
+                    m_match = MetaMatchup.objects.get(brawler_a=b, brawler_b=enemy)
+                    meta_matchup_wr = m_match.win_rate_a
+                except MetaMatchup.DoesNotExist:
+                    meta_matchup_wr = 0.5
+
+                if perceptions.exists():
                     from django.db.models import Sum
                     sum_value = perceptions.aggregate(Sum('value'))['value__sum'] or 0
-                    avg_value = sum_value / games_count
+                    avg_value = sum_value / perceptions.count()
                     
                     # Linear interpolation for rating (from -2.0 to 1.0)
                     # -2.0 -> 0.65 (hard counter)
@@ -154,18 +161,21 @@ class DraftSuggestionView(views.APIView):
                         factor = 0.85 + (avg_value - (-1.0)) * 0.20
                     else:
                         factor = 1.00 + avg_value * 0.15
+                elif games_count > 0:
+                    # No perceptions, but have played matches -> Bayesian smoothed win rate against this enemy
+                    wins_count = match_query.filter(result='victory').count()
+                    k_match_prior = 5.0
+                    alpha_match_prior = meta_matchup_wr * k_match_prior
+                    smoothed_match_wr = (wins_count + alpha_match_prior) / (games_count + k_match_prior)
+                    factor = smoothed_match_wr / 0.5
                 else:
-                    # Meta matchup fallback
-                    try:
-                        m_match = MetaMatchup.objects.get(brawler_a=b, brawler_b=enemy)
-                        factor = m_match.win_rate_a / 0.5
-                    except MetaMatchup.DoesNotExist:
-                        factor = 1.0
+                    # No perceptions and no games -> Meta matchup fallback
+                    factor = meta_matchup_wr / 0.5
                 
                 score_b *= factor
 
             # --- 3. Component C: Synergy Factor ---
-            score_c = 1.0
+            synergy_factors = []
             for ally_id in allies_picked:
                 try:
                     ally = Brawler.objects.get(id=ally_id)
@@ -183,15 +193,20 @@ class DraftSuggestionView(views.APIView):
                 games_synergy = synergy_matches.count()
                 wins_synergy = synergy_matches.filter(result='victory').count()
 
-                if games_synergy > 0:
+                if games_synergy >= 5:
                     alpha_syn = 2.5
                     beta_syn = 2.5
                     syn_rate = (wins_synergy + alpha_syn) / (games_synergy + alpha_syn + beta_syn)
                     factor = syn_rate / 0.5
                 else:
                     factor = 1.0
+                
+                synergy_factors.append(factor)
 
-                score_c *= factor
+            if synergy_factors:
+                score_c = sum(synergy_factors) / len(synergy_factors)
+            else:
+                score_c = 1.0
 
             # --- 4. Component E: Confidence Penalty ---
             score_e = 1.0 - 0.2 * math.exp(-games_player / 5.0)

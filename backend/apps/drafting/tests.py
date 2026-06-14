@@ -747,6 +747,120 @@ class DraftAssistantTests(TestCase):
         self.assertEqual(response2.status_code, 400)
         self.assertIn("already recorded", response2.json()['error'])
 
+    def test_matchup_and_synergy_refinements(self):
+        from apps.brawlers.models import MetaMatchup
+        
+        # Authenticate first to ensure the player exists
+        self.client.get(reverse('player-me'), **self.auth_headers)
+        player = Player.objects.get(supabase_auth_id='supabase-test-uid-123')
+
+        # 1. Test Synergy Factor threshold and averaging:
+        # Create matches where player plays Shelly and Colt is an ally.
+        # We will test two scenarios:
+        # A) 4 games (below threshold of 5) -> should result in synergy factor 1.0
+        # B) 5 games (reaches threshold) -> should calculate synergy factor based on games
+
+        # Colt as ally (all victories)
+        for i in range(4):
+            m = Match.objects.create(
+                player=player, map=self.stone_fort, my_brawler=self.shelly, mode="Gem Grab", result="victory"
+            )
+            DraftEvent.objects.create(match=m, brawler=self.colt, team="allied", type="pick", order=3)
+
+        # Let's request suggestions with Colt as ally.
+        # Since games_count (4) < 5, Colt synergy factor should be 1.0.
+        payload_colt_4 = {
+            "map_id": self.stone_fort.id,
+            "allies_picked": [self.colt.id],
+            "enemies_picked": [],
+            "allies_banned": [],
+            "enemies_banned": []
+        }
+        res = self.client.post(
+            reverse('draft-suggest'),
+            payload_colt_4,
+            content_type='application/json',
+            **self.auth_headers
+        )
+        self.assertEqual(res.status_code, 200)
+        suggestions = res.json()['suggestions']
+        shelly_sug = next(s for s in suggestions if s['brawler']['id'] == self.shelly.id)
+        # Component C synergy factor should be 1.0
+        self.assertEqual(shelly_sug['components']['C_synergy_factor'], 1.0)
+
+        # Now add a 5th game to reach the threshold
+        m5 = Match.objects.create(
+            player=player, map=self.stone_fort, my_brawler=self.shelly, mode="Gem Grab", result="victory"
+        )
+        DraftEvent.objects.create(match=m5, brawler=self.colt, team="allied", type="pick", order=3)
+
+        # Calculate expected factor: 5 wins, 5 games.
+        # syn_rate = (5 + 2.5) / (5 + 5) = 7.5 / 10 = 0.75
+        # Colt factor = 0.75 / 0.5 = 1.50
+        res2 = self.client.post(
+            reverse('draft-suggest'),
+            payload_colt_4,
+            content_type='application/json',
+            **self.auth_headers
+        )
+        shelly_sug2 = next(s for s in res2.json()['suggestions'] if s['brawler']['id'] == self.shelly.id)
+        self.assertEqual(shelly_sug2['components']['C_synergy_factor'], 1.5)
+
+        # Test Averaging instead of multiplying:
+        # Add another ally pick (Bull) who has 0 synergy games with Shelly (factor 1.0).
+        # Average factor should be (1.5 + 1.0) / 2 = 1.25. (If it multiplied, it would be 1.5 * 1.0 = 1.5).
+        payload_two_allies = {
+            "map_id": self.stone_fort.id,
+            "allies_picked": [self.colt.id, self.bull.id],
+            "enemies_picked": [],
+            "allies_banned": [],
+            "enemies_banned": []
+        }
+        res3 = self.client.post(
+            reverse('draft-suggest'),
+            payload_two_allies,
+            content_type='application/json',
+            **self.auth_headers
+        )
+        shelly_sug3 = next(s for s in res3.json()['suggestions'] if s['brawler']['id'] == self.shelly.id)
+        self.assertEqual(shelly_sug3['components']['C_synergy_factor'], 1.25)
+
+        # 2. Test Matchup Factor Fallback (Component B):
+        # Create matches where player plays Shelly and Bull is enemy.
+        # We will NOT record any perceptions.
+        # Create 5 matches (3 victories, 2 defeats) against Bull.
+        for i in range(5):
+            res_str = "victory" if i < 3 else "defeat"
+            m = Match.objects.create(
+                player=player, map=self.stone_fort, my_brawler=self.shelly, mode="Gem Grab", result=res_str
+            )
+            DraftEvent.objects.create(match=m, brawler=self.bull, team="enemy", type="pick", order=4)
+
+        # Set up a MetaMatchup win rate for Shelly vs Bull: 0.60
+        MetaMatchup.objects.create(brawler_a=self.shelly, brawler_b=self.bull, win_rate_a=0.60)
+
+        # Without perceptions recorded, the matchup factor should use the Bayesian smoothed win rate against enemy:
+        # wins = 3, games = 5, meta_matchup_wr = 0.60, k_prior = 5.0
+        # alpha_prior = 0.60 * 5.0 = 3.0
+        # smoothed_match_wr = (3 + 3.0) / (5 + 5.0) = 6.0 / 10.0 = 0.60
+        # Factor = 0.60 / 0.5 = 1.20
+        payload_matchup = {
+            "map_id": self.stone_fort.id,
+            "allies_picked": [],
+            "enemies_picked": [self.bull.id],
+            "allies_banned": [],
+            "enemies_banned": []
+        }
+        res4 = self.client.post(
+            reverse('draft-suggest'),
+            payload_matchup,
+            content_type='application/json',
+            **self.auth_headers
+        )
+        shelly_sug4 = next(s for s in res4.json()['suggestions'] if s['brawler']['id'] == self.shelly.id)
+        self.assertEqual(shelly_sug4['components']['B_matchup_factor'], 1.20)
+
+
 
 
 
