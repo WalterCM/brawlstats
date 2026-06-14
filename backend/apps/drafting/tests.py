@@ -329,3 +329,58 @@ class DraftAssistantTests(TestCase):
 
         # Verify the perception record has been DELETED from the database
         self.assertEqual(Perception.objects.filter(match=match, brawler_rival=rival).count(), 0)
+
+    @patch('requests.get')
+    def test_sync_api_matches(self, mock_get):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+
+        # Create player, user
+        player = Player.objects.create(name="Walter Test", player_tag="#TESTTAG123", supabase_auth_id="django-user-999")
+        user = User.objects.create(username="user_999")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        # Setup mock BS API response for battle log (valid 3v3 team battle: 2 teams, 3 players each)
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'items': [
+                {
+                    'battleTime': '20260613T211812.000Z',
+                    'event': {'map': 'Whisper Vale'},
+                    'battle': {
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#TESTTAG123', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY'}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # Create map in catalog
+        map_obj = Map.objects.create(id="99", name="Whisper Vale", mode="gemGrab", is_ranked=True)
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Call sync-api endpoint
+        url = reverse('match-list') + 'sync-api/'
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['synced_count'], 1)
+
+        # Verify a new Match and DraftEvents were created in the DB
+        match = Match.objects.get(player=player, api_match_id='20260613T211812.000Z')
+        self.assertEqual(match.map, map_obj)
+        self.assertEqual(match.my_brawler, self.shelly)
+        self.assertEqual(match.draft_events.count(), 6)

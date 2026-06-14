@@ -142,6 +142,19 @@ export const api = {
     return res.json();
   },
 
+  // Bulk sync all new 3v3 matches from the Brawl Stars API battle log
+  async syncMatchesAPI() {
+    const res = await fetch(`${API_BASE_URL}/matches/sync-api/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to synchronize matches from API');
+    }
+    return res.json();
+  },
+
   // Fetch match logs history
   async fetchMatches() {
     const res = await fetch(`${API_BASE_URL}/matches/`, {

@@ -67,6 +67,7 @@ function App() {
   const [opponentPerceptions, setOpponentPerceptions] = useState({});
   const [editingMatchId, setEditingMatchId] = useState(null);
   const [apiMatchId, setApiMatchId] = useState(null);
+  const [syncingHistory, setSyncingHistory] = useState(false);
 
   const [profileName, setProfileName] = useState('');
   const [profileTag, setProfileTag] = useState('');
@@ -501,6 +502,20 @@ function App() {
       alert(err.message || "Failed to ingest last battle from API.");
     } finally {
       setIngesting(false);
+    }
+  };
+
+  const handleSyncHistory = async () => {
+    setSyncingHistory(true);
+    try {
+      const res = await api.syncMatchesAPI();
+      alert(res.message || "Matches synchronized successfully!");
+      await loadUserStats();
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Failed to synchronize matches.");
+    } finally {
+      setSyncingHistory(false);
     }
   };
 
@@ -1021,7 +1036,28 @@ function App() {
               </div>
 
               <div className="history-section">
-                <h3>Recent Matches</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                  <h3 style={{ margin: 0 }}>Recent Matches</h3>
+                  <button
+                    className="btn btn-sm"
+                    onClick={handleSyncHistory}
+                    disabled={syncingHistory}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      border: '1px solid var(--border-glass)',
+                      color: 'var(--color-text)',
+                      fontSize: '11px',
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    {syncingHistory ? 'Syncing...' : '🔄 Sync API History'}
+                  </button>
+                </div>
                 <div className="match-list">
                   {displayedMatches.slice(0, 5).map((m) => (
                     <div key={m.id} className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', fontSize: '11px', marginBottom: '6px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-glass)' }}>
