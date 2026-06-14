@@ -86,6 +86,7 @@ function App() {
 
   const [minNormalTrophies, setMinNormalTrophies] = useState(750);
   const [suggestionTrophyThreshold, setSuggestionTrophyThreshold] = useState(1000);
+  const [debouncedSuggestionTrophyThreshold, setDebouncedSuggestionTrophyThreshold] = useState(1000);
   const [myBrawlerTrophies, setMyBrawlerTrophies] = useState(null);
   const [isStarPlayer, setIsStarPlayer] = useState(false);
 
@@ -160,6 +161,16 @@ function App() {
     }
   }, [currentUser]);
 
+  // Debounce the suggestions trophy threshold to prevent UI lag on range slider drag
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSuggestionTrophyThreshold(suggestionTrophyThreshold);
+    }, 300);
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [suggestionTrophyThreshold]);
+
   // Load recommendations whenever draft selections or map changes
   useEffect(() => {
     if (selectedMap && currentUser && backendConnected) {
@@ -167,7 +178,7 @@ function App() {
     } else {
       setSuggestions([]);
     }
-  }, [draft, selectedMap, currentUser, backendConnected, enableTurns, activeSlot, suggestionTrophyThreshold]);
+  }, [draft, selectedMap, currentUser, backendConnected, enableTurns, activeSlot, debouncedSuggestionTrophyThreshold]);
 
   const loadCatalogs = async () => {
     if (!currentUser) return;
@@ -251,7 +262,7 @@ function App() {
         draftType === 'ranked' ? enableTurns : false,
         activeTeam,
         draftType,
-        suggestionTrophyThreshold
+        debouncedSuggestionTrophyThreshold
       );
       setSuggestions(res.suggestions || []);
     } catch (err) {
