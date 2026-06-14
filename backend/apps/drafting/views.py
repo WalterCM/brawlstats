@@ -242,6 +242,109 @@ class DraftSuggestionView(views.APIView):
         })
 
 
+def resolve_battle_teams(battle, normalized_player_tag):
+    teams = battle.get('teams', [])
+    allied_team = None
+    enemy_team = None
+    my_brawler_data = None
+
+    for team_idx, team_players in enumerate(teams):
+        for p in team_players:
+            p_tag = p.get('tag', '').replace('#', '').upper()
+            if p_tag == normalized_player_tag:
+                allied_team = team_players
+                enemy_team = teams[1 - team_idx]
+                my_brawler_data = p.get('brawler')
+                break
+        if allied_team:
+            break
+
+    return allied_team, enemy_team, my_brawler_data
+
+
+def get_brawler_or_serialize(brawler_api_data):
+    if not brawler_api_data:
+        return None
+    b_id = str(brawler_api_data.get('id'))
+    db_brawler = Brawler.objects.filter(id=b_id).first()
+    if not db_brawler:
+        db_brawler = Brawler.objects.filter(name__iexact=brawler_api_data.get('name')).first()
+    if db_brawler:
+        return BrawlerSerializer(db_brawler).data
+    return {
+        "id": b_id,
+        "name": brawler_api_data.get('name', 'Unknown'),
+        "image_url": ""
+    }
+
+
+def parse_battle_time(t_str):
+    from datetime import datetime
+    try:
+        return datetime.strptime(t_str.split('.')[0], "%Y%m%dT%H%M%S")
+    except Exception:
+        return None
+
+
+def group_ranked_sets(items, target_item, db_map, normalized_player_tag):
+    target_battle = target_item.get('battle', {})
+    target_allied, target_enemy, _ = resolve_battle_teams(target_battle, normalized_player_tag)
+    if not target_allied or not target_enemy:
+        return [target_item]
+
+    target_allies_brawler_ids = sorted([str(p.get('brawler', {}).get('id')) for p in target_allied])
+    target_enemies_brawler_ids = sorted([str(p.get('brawler', {}).get('id')) for p in target_enemy])
+
+    target_time = parse_battle_time(target_item.get('battleTime', ''))
+    if not target_time:
+        return [target_item]
+
+    series = []
+    for item in items:
+        battle = item.get('battle', {})
+        b_type = battle.get('type', '')
+        if b_type not in ('soloRanked', 'teamRanked'):
+            continue
+
+        event = item.get('event', {})
+        map_name = event.get('map')
+        if not map_name or map_name.strip().lower() != db_map.name.strip().lower():
+            continue
+
+        allied_team, enemy_team, _ = resolve_battle_teams(battle, normalized_player_tag)
+        if not allied_team or not enemy_team:
+            continue
+
+        allies_brawler_ids = sorted([str(p.get('brawler', {}).get('id')) for p in allied_team])
+        enemies_brawler_ids = sorted([str(p.get('brawler', {}).get('id')) for p in enemy_team])
+
+        if allies_brawler_ids == target_allies_brawler_ids and enemies_brawler_ids == target_enemies_brawler_ids:
+            item_time = parse_battle_time(item.get('battleTime', ''))
+            if item_time and abs((item_time - target_time).total_seconds()) < 600:
+                series.append(item)
+
+    series.sort(key=lambda x: x.get('battleTime', ''))
+    return series
+
+
+def serialize_set_data(item, normalized_player_tag):
+    battle = item.get('battle', {})
+    _, _, my_brawler_data = resolve_battle_teams(battle, normalized_player_tag)
+    raw_result = battle.get('result', 'defeat')
+    result = 'victory' if raw_result == 'victory' else 'defeat'
+    my_brawler_trophies = my_brawler_data.get('trophies', 0) if my_brawler_data else 0
+    star_player_api = battle.get('starPlayer')
+    star_player_tag = star_player_api.get('tag', '') if star_player_api else ''
+    is_star_player = star_player_tag.replace('#', '').upper() == normalized_player_tag
+
+    return {
+        "api_match_id": item.get('battleTime'),
+        "result": result,
+        "my_brawler_trophies": my_brawler_trophies,
+        "is_star_player": is_star_player
+    }
+
+
 class LastBattleIngestView(views.APIView):
     permission_classes = [IsSupabaseAuthenticated]
 
@@ -278,7 +381,7 @@ class LastBattleIngestView(views.APIView):
                     {"error": f"Failed to fetch battle log from Brawl Stars API: {res.text}"},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
             data = res.json()
             items = data.get('items', [])
             if not items:
@@ -288,9 +391,10 @@ class LastBattleIngestView(views.APIView):
                 )
 
             # Find the first 3v3 team battle belonging to an allowed mode that passes the user's filters
-            target_battle = None
+            target_battle_item = None
             db_map = None
             allowed_modes = {'gemgrab', 'brawlball', 'heist', 'hotzone', 'knockout', 'bounty'}
+            has_any_competitive = False
 
             for item in items:
                 battle = item.get('battle', {})
@@ -304,29 +408,17 @@ class LastBattleIngestView(views.APIView):
                         if candidate_map:
                             normalized_mode = candidate_map.mode.lower().replace(' ', '').replace('_', '').replace('-', '')
                             if normalized_mode in allowed_modes:
-                                # Resolve player brawler to get trophies and check normal filters
-                                allied_team = None
-                                my_brawler_api = None
-                                for t_idx, team_players in enumerate(battle.get('teams', [])):
-                                    for p in team_players:
-                                        p_tag = p.get('tag', '').replace('#', '').upper()
-                                        if p_tag == normalized_player_tag:
-                                            allied_team = team_players
-                                            my_brawler_api = p.get('brawler')
-                                            break
-                                    if allied_team:
-                                        break
-                                
+                                allied_team, enemy_team, my_brawler_api = resolve_battle_teams(battle, normalized_player_tag)
                                 if not allied_team or not my_brawler_api:
                                     continue
-                                
+
                                 # Resolve draft type
                                 battle_type = battle.get('type', '')
                                 if battle_type:
                                     candidate_draft_type = 'ranked' if battle_type in ('soloRanked', 'teamRanked') else 'normal'
                                 else:
                                     candidate_draft_type = 'ranked' if candidate_map.is_ranked else 'normal'
-                                
+
                                 # Check normal filters
                                 if candidate_draft_type == 'normal':
                                     my_brawler_id = str(my_brawler_api.get('id'))
@@ -335,90 +427,56 @@ class LastBattleIngestView(views.APIView):
                                         my_brawler = Brawler.objects.filter(name__iexact=my_brawler_api.get('name')).first()
                                     if not my_brawler:
                                         continue
-                                    
+
                                     my_brawler_trophies = my_brawler_api.get('trophies', 0) or 0
                                     min_trophies = getattr(request.player, 'min_normal_trophies', 750)
                                     has_ranked_match = Match.objects.filter(player=request.player, my_brawler=my_brawler, draft_type='ranked').exists()
                                     if my_brawler_trophies < min_trophies and not has_ranked_match:
                                         continue
-                                
-                                target_battle = item
+
+                                has_any_competitive = True
+
+                                # Skip if this specific set/match is already recorded
+                                battle_time = item.get('battleTime')
+                                if battle_time and Match.objects.filter(player=request.player, api_match_id=battle_time).exists():
+                                    continue
+
+                                target_battle_item = item
                                 db_map = candidate_map
                                 break
 
-            if not target_battle or not db_map:
+            if not target_battle_item or not db_map:
+                if has_any_competitive:
+                    return response.Response(
+                        {"error": "The latest competitive matches in your battle log are already recorded in Brawl Stats."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
                 return response.Response(
                     {"error": "No competitive 3v3 team battles found in the player's recent battle log."},
                     status=status.HTTP_404_NOT_FOUND
                 )
 
-            battle_time = target_battle.get('battleTime')
-            if battle_time and Match.objects.filter(player=request.player, api_match_id=battle_time).exists():
-                return response.Response(
-                    {"error": "The latest competitive match in your battle log is already recorded in Brawl Stats."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            event = target_battle.get('event', {})
-            battle = target_battle.get('battle', {})
-
-            teams = battle.get('teams', [])
-            allied_team = None
-            enemy_team = None
-            my_brawler_data = None
-
-            normalized_player_tag = player_tag.replace('#', '').upper()
-
-            for team_idx, team_players in enumerate(teams):
-                for p in team_players:
-                    p_tag = p.get('tag', '').replace('#', '').upper()
-                    if p_tag == normalized_player_tag:
-                        allied_team = team_players
-                        enemy_team = teams[1 - team_idx]
-                        my_brawler_data = p.get('brawler')
-                        break
-                if allied_team:
-                    break
-
-            if not allied_team:
-                return response.Response(
-                    {"error": f"Could not find player tag '{player_tag}' in the last battle's teams."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            def get_brawler_or_serialize(brawler_api_data):
-                if not brawler_api_data:
-                    return None
-                b_id = str(brawler_api_data.get('id'))
-                db_brawler = Brawler.objects.filter(id=b_id).first()
-                if not db_brawler:
-                    db_brawler = Brawler.objects.filter(name__iexact=brawler_api_data.get('name')).first()
-                if db_brawler:
-                    return BrawlerSerializer(db_brawler).data
-                return {
-                    "id": b_id,
-                    "name": brawler_api_data.get('name', 'Unknown'),
-                    "image_url": ""
-                }
-
-            my_brawler_serialized = get_brawler_or_serialize(my_brawler_data)
-            allies_serialized = [get_brawler_or_serialize(p.get('brawler')) for p in allied_team]
-            enemies_serialized = [get_brawler_or_serialize(p.get('brawler')) for p in enemy_team]
-
-            raw_result = battle.get('result', 'defeat')
-            result = 'victory' if raw_result == 'victory' else 'defeat'
-
-            # Parse trophies and star player status
-            my_brawler_trophies = my_brawler_data.get('trophies', 0) or 0
-            star_player_api = battle.get('starPlayer')
-            star_player_tag = star_player_api.get('tag', '') if star_player_api else ''
-            is_star_player = star_player_tag.replace('#', '').upper() == normalized_player_tag
-
+            # Resolve draft type
+            battle = target_battle_item.get('battle', {})
             battle_type = battle.get('type', '')
             if battle_type:
                 draft_type = 'ranked' if battle_type in ('soloRanked', 'teamRanked') else 'normal'
             else:
                 draft_type = 'ranked' if db_map.is_ranked else 'normal'
+
+            # Group sets
+            if draft_type == 'ranked':
+                series_items = group_ranked_sets(items, target_battle_item, db_map, normalized_player_tag)
+            else:
+                series_items = [target_battle_item]
+
+            # Serialize team info from the target item
+            allied_team, enemy_team, my_brawler_data = resolve_battle_teams(battle, normalized_player_tag)
+            my_brawler_serialized = get_brawler_or_serialize(my_brawler_data)
+            allies_serialized = [get_brawler_or_serialize(p.get('brawler')) for p in allied_team]
+            enemies_serialized = [get_brawler_or_serialize(p.get('brawler')) for p in enemy_team]
+
+            sets_serialized = [serialize_set_data(it, normalized_player_tag) for it in series_items]
 
             return response.Response({
                 "map": {
@@ -431,11 +489,12 @@ class LastBattleIngestView(views.APIView):
                 "my_brawler": my_brawler_serialized,
                 "allies_picked": allies_serialized,
                 "enemies_picked": enemies_serialized,
-                "result": result,
-                "api_match_id": battle_time,
-                "my_brawler_trophies": my_brawler_trophies,
-                "is_star_player": is_star_player,
-                "draft_type": draft_type
+                "draft_type": draft_type,
+                "sets": sets_serialized,
+                "api_match_id": target_battle_item.get('battleTime'),
+                "result": sets_serialized[0]['result'] if sets_serialized else 'victory',
+                "my_brawler_trophies": sets_serialized[0]['my_brawler_trophies'] if sets_serialized else 0,
+                "is_star_player": sets_serialized[0]['is_star_player'] if sets_serialized else False
             })
 
         except requests.RequestException as req_err:
@@ -446,5 +505,156 @@ class LastBattleIngestView(views.APIView):
         except Exception as e:
             return response.Response(
                 {"error": f"An error occurred while fetching last battle: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class LinkDraftBattleView(views.APIView):
+    permission_classes = [IsSupabaseAuthenticated]
+
+    def post(self, request):
+        import os
+        import requests
+
+        api_key = os.getenv('BRAWL_STARS_API_KEY')
+        player_tag = request.player.player_tag or os.getenv('BRAWL_STARS_PLAYER_TAG')
+
+        if not api_key:
+            return response.Response(
+                {"error": "BRAWL_STARS_API_KEY is not configured in the backend environment."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not player_tag:
+            return response.Response(
+                {"error": "Please configure your Player Tag in your Profile page before linking drafts."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        data = request.data
+        map_id = data.get('map_id')
+        my_brawler_id = str(data.get('my_brawler_id'))
+        allies_picked = [str(aid) for aid in data.get('allies_picked', []) if aid]
+        enemies_picked = [str(eid) for eid in data.get('enemies_picked', []) if eid]
+
+        if not map_id or not my_brawler_id:
+            return response.Response(
+                {"error": "map_id and my_brawler_id are required fields."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            db_map = Map.objects.get(id=map_id)
+        except Map.DoesNotExist:
+            return response.Response(
+                {"error": "Map not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        encoded_tag = player_tag.replace('#', '%23')
+        normalized_player_tag = player_tag.replace('#', '').upper()
+        url = f"https://api.brawlstars.com/v1/players/{encoded_tag}/battlelog"
+        headers = {
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        try:
+            res = requests.get(url, headers=headers, timeout=10)
+            if res.status_code != 200:
+                return response.Response(
+                    {"error": f"Failed to fetch battle log from Brawl Stars API: {res.text}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            data = res.json()
+            items = data.get('items', [])
+            if not items:
+                return response.Response(
+                    {"error": "No battles found in player's battle log."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            target_battle_item = None
+            has_matching_composition = False
+
+            # Create sets of composition IDs to match regardless of pick order
+            # Allies includes my brawler
+            target_allies_set = set(allies_picked + [my_brawler_id])
+            target_enemies_set = set(enemies_picked)
+
+            for item in items:
+                battle = item.get('battle', {})
+                teams = battle.get('teams', [])
+                if not teams or len(teams) != 2 or len(teams[0]) != 3 or len(teams[1]) != 3:
+                    continue
+
+                event = item.get('event', {})
+                map_name = event.get('map')
+                if not map_name or map_name.strip().lower() != db_map.name.strip().lower():
+                    continue
+
+                allied_team, enemy_team, my_brawler_api = resolve_battle_teams(battle, normalized_player_tag)
+                if not allied_team or not enemy_team or not my_brawler_api:
+                    continue
+
+                # Check if player played the expected brawler
+                api_brawler_id = str(my_brawler_api.get('id'))
+                if api_brawler_id != my_brawler_id:
+                    continue
+
+                # Verify full team compositions
+                api_allies_set = set([str(p.get('brawler', {}).get('id')) for p in allied_team])
+                api_enemies_set = set([str(p.get('brawler', {}).get('id')) for p in enemy_team])
+
+                if api_allies_set == target_allies_set and api_enemies_set == target_enemies_set:
+                    has_matching_composition = True
+
+                    # Skip if this specific match set is already recorded
+                    battle_time = item.get('battleTime')
+                    if battle_time and Match.objects.filter(player=request.player, api_match_id=battle_time).exists():
+                        continue
+
+                    target_battle_item = item
+                    break
+
+            if not target_battle_item:
+                if has_matching_composition:
+                    return response.Response(
+                        {"error": "The matches matching this composition in your battle log are already recorded in Brawl Stats."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                return response.Response(
+                    {"error": "Could not find any unlinked battle log entry matching this brawler composition and map."},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
+            # Resolve draft type
+            battle_type = target_battle_item.get('battle', {}).get('type', '')
+            if battle_type:
+                draft_type = 'ranked' if battle_type in ('soloRanked', 'teamRanked') else 'normal'
+            else:
+                draft_type = 'ranked' if db_map.is_ranked else 'normal'
+
+            # Group sets
+            if draft_type == 'ranked':
+                series_items = group_ranked_sets(items, target_battle_item, db_map, normalized_player_tag)
+            else:
+                series_items = [target_battle_item]
+
+            sets_serialized = [serialize_set_data(it, normalized_player_tag) for it in series_items]
+
+            return response.Response({
+                "draft_type": draft_type,
+                "sets": sets_serialized
+            })
+
+        except requests.RequestException as req_err:
+            return response.Response(
+                {"error": f"Brawl Stars API connection error or timeout. Please check your internet connection and ensure your API key matches your current IP address. Details: {str(req_err)}"},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+        except Exception as e:
+            return response.Response(
+                {"error": f"An error occurred while linking draft: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

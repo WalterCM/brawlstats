@@ -13,6 +13,118 @@ class MatchViewSet(viewsets.ModelViewSet):
         # Filter match history specifically to the authenticated player
         return Match.objects.filter(player=self.request.player).order_by('-date')
 
+    @action(detail=False, methods=['post'], url_path='submit-series')
+    def submit_series(self, request):
+        from apps.core.models import Map, Brawler
+        from apps.matches.models import Match, DraftEvent
+        from apps.drafting.models import Perception
+
+        data = request.data
+        map_id = data.get('map_id')
+        my_brawler_id = data.get('my_brawler_id')
+        mode = data.get('mode')
+        draft_type = data.get('draft_type', 'normal')
+        draft_events_data = data.get('draft_events', [])
+        perceptions_data = data.get('perceptions', [])
+        sets_data = data.get('sets', [])
+
+        if not map_id:
+            return Response({"error": "map_id is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            db_map = Map.objects.get(id=map_id)
+        except Map.DoesNotExist:
+            return Response({"error": "Map not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        my_brawler = None
+        if my_brawler_id:
+            try:
+                my_brawler = Brawler.objects.get(id=my_brawler_id)
+            except Brawler.DoesNotExist:
+                pass
+
+        # If sets_data is empty, represent it as a single manual match
+        if not sets_data:
+            sets_data = [{
+                "api_match_id": None,
+                "result": data.get('result', 'victory'),
+                "my_brawler_trophies": data.get('my_brawler_trophies'),
+                "is_star_player": data.get('is_star_player', False)
+            }]
+
+        import uuid
+        first_api_id = sets_data[0].get('api_match_id')
+        series_id = first_api_id if first_api_id else f"manual-{uuid.uuid4().hex[:12]}"
+
+        created_matches = []
+
+        from django.db import transaction
+        try:
+            with transaction.atomic():
+                for idx, set_item in enumerate(sets_data):
+                    api_match_id = set_item.get('api_match_id')
+                    result = set_item.get('result', 'victory')
+                    my_brawler_trophies = set_item.get('my_brawler_trophies')
+                    is_star_player = set_item.get('is_star_player', False)
+
+                    match = Match.objects.create(
+                        player=request.player,
+                        map=db_map,
+                        my_brawler=my_brawler,
+                        mode=mode or db_map.mode,
+                        result=result,
+                        draft_type=draft_type,
+                        api_match_id=api_match_id,
+                        series_api_match_id=series_id,
+                        my_brawler_trophies=my_brawler_trophies,
+                        is_star_player=is_star_player
+                    )
+                    created_matches.append(match)
+
+                    for event in draft_events_data:
+                        b_id = event.get('brawler_id')
+                        if b_id:
+                            try:
+                                b_obj = Brawler.objects.get(id=b_id)
+                                DraftEvent.objects.create(
+                                    match=match,
+                                    type=event.get('type', 'pick'),
+                                    brawler=b_obj,
+                                    team=event.get('team', 'allied'),
+                                    order=event.get('order', 0)
+                                )
+                            except Brawler.DoesNotExist:
+                                pass
+
+                    if idx == 0:
+                        for perc in perceptions_data:
+                            rival_id = perc.get('brawler_rival_id')
+                            val = perc.get('value')
+                            if rival_id and val is not None:
+                                try:
+                                    rival_obj = Brawler.objects.get(id=rival_id)
+                                    Perception.objects.create(
+                                        match=match,
+                                        player=request.player,
+                                        my_brawler=my_brawler,
+                                        brawler_rival=rival_obj,
+                                        value=val
+                                    )
+                                except Brawler.DoesNotExist:
+                                    pass
+
+            serializer = MatchSerializer(created_matches[0], context={'request': request})
+            return Response({
+                "message": f"Successfully logged {len(created_matches)} match sets.",
+                "match": serializer.data
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response(
+                {"error": f"An error occurred while saving the match series: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=True, methods=['post'], url_path='link-api')
     def link_api(self, request, pk=None):
         match = self.get_object()
@@ -116,10 +228,70 @@ class MatchViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
             
-            # Update match and save
-            battle_time = matched_battle.get('battleTime')
-            match.api_match_id = battle_time
+            # Group sets if it is a ranked match
+            from apps.drafting.views import group_ranked_sets, resolve_battle_teams
+            from apps.matches.models import DraftEvent
+            if match.draft_type == 'ranked':
+                series_items = group_ranked_sets(items, matched_battle, match.map, normalized_player_tag)
+            else:
+                series_items = [matched_battle]
+
+            # The first set of the series (chronologically first) will update the existing manual match
+            first_set_item = series_items[0]
+            first_battle_time = first_set_item.get('battleTime')
+            
+            # Update the existing match
+            first_battle = first_set_item.get('battle', {})
+            allied_team, enemy_team, my_brawler_data = resolve_battle_teams(first_battle, normalized_player_tag)
+            raw_result = first_battle.get('result', 'defeat')
+            
+            match.api_match_id = first_battle_time
+            match.series_api_match_id = first_battle_time
+            match.result = 'victory' if raw_result == 'victory' else 'defeat'
+            if my_brawler_data:
+                match.my_brawler_trophies = my_brawler_data.get('trophies')
+                star_player_api = first_battle.get('starPlayer')
+                star_player_tag = star_player_api.get('tag', '') if star_player_api else ''
+                match.is_star_player = star_player_tag.replace('#', '').upper() == normalized_player_tag
             match.save()
+
+            # Create subsequent matches for any additional sets in the series
+            for extra_item in series_items[1:]:
+                extra_battle_time = extra_item.get('battleTime')
+                # Skip if already exists
+                if Match.objects.filter(player=request.player, api_match_id=extra_battle_time).exists():
+                    continue
+                
+                extra_battle = extra_item.get('battle', {})
+                _, _, extra_my_brawler_data = resolve_battle_teams(extra_battle, normalized_player_tag)
+                extra_raw_result = extra_battle.get('result', 'defeat')
+                
+                extra_trophies = extra_my_brawler_data.get('trophies') if extra_my_brawler_data else None
+                extra_star_player_api = extra_battle.get('starPlayer')
+                extra_star_player_tag = extra_star_player_api.get('tag', '') if extra_star_player_api else ''
+                extra_is_star_player = extra_star_player_tag.replace('#', '').upper() == normalized_player_tag
+                
+                extra_match = Match.objects.create(
+                    player=request.player,
+                    map=match.map,
+                    my_brawler=match.my_brawler,
+                    mode=match.mode,
+                    draft_type=match.draft_type,
+                    result='victory' if extra_raw_result == 'victory' else 'defeat',
+                    api_match_id=extra_battle_time,
+                    series_api_match_id=first_battle_time,
+                    my_brawler_trophies=extra_trophies,
+                    is_star_player=extra_is_star_player
+                )
+
+                for original_evt in match.draft_events.all():
+                    DraftEvent.objects.create(
+                        match=extra_match,
+                        brawler=original_evt.brawler,
+                        type=original_evt.type,
+                        team=original_evt.team,
+                        order=original_evt.order
+                    )
             
             serializer = self.get_serializer(match)
             return Response(serializer.data, status=status.HTTP_200_OK)

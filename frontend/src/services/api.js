@@ -108,6 +108,34 @@ export const api = {
     return res.json();
   },
 
+  // Link manual draft brawlers to API matches
+  async linkDraftBattle(payload) {
+    const res = await fetch(`${API_BASE_URL}/draft/link-draft/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to link draft with API battles');
+    }
+    return res.json();
+  },
+
+  // Save a series/multi-set of matches
+  async submitMatchSeries(payload) {
+    const res = await fetch(`${API_BASE_URL}/matches/submit-series/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to submit match series');
+    }
+    return res.json();
+  },
+
   // Save manual match logs
   async saveMatch(matchPayload) {
     const res = await fetch(`${API_BASE_URL}/matches/`, {

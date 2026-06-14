@@ -92,6 +92,9 @@ function App() {
   const [opponentPerceptions, setOpponentPerceptions] = useState({});
   const [editingMatchId, setEditingMatchId] = useState(null);
   const [apiMatchId, setApiMatchId] = useState(null);
+  const [sets, setSets] = useState([]);
+  const [linkingMatch, setLinkingMatch] = useState(false);
+  const [linkingMatchId, setLinkingMatchId] = useState(null);
   const [syncingHistory, setSyncingHistory] = useState(false);
 
   const [minNormalTrophies, setMinNormalTrophies] = useState(750);
@@ -494,6 +497,7 @@ function App() {
 
   const openLogMatch = () => {
     setMyBrawler(null);
+    setSets([]);
 
     const enemies = draft.enemies_picked.filter(Boolean);
     const initialPerceptions = {};
@@ -535,10 +539,20 @@ function App() {
       setDraft(newDraft);
 
       setMyBrawler(data.my_brawler);
-      setMatchResult(data.result);
-      setApiMatchId(data.api_match_id);
-      setMyBrawlerTrophies(data.my_brawler_trophies !== undefined ? data.my_brawler_trophies : null);
-      setIsStarPlayer(data.is_star_player !== undefined ? data.is_star_player : false);
+
+      // Extract set results
+      const fetchedSets = data.sets || [];
+      setSets(fetchedSets);
+
+      const victoriesCount = fetchedSets.filter(s => s.result === 'victory').length;
+      const defeatsCount = fetchedSets.filter(s => s.result === 'defeat').length;
+      const overallResult = victoriesCount > defeatsCount ? 'victory' : 'defeat';
+      setMatchResult(overallResult);
+
+      const lastSet = fetchedSets[fetchedSets.length - 1];
+      setApiMatchId(fetchedSets[0]?.api_match_id || null);
+      setMyBrawlerTrophies(lastSet ? lastSet.my_brawler_trophies : null);
+      setIsStarPlayer(fetchedSets.some(s => s.is_star_player));
 
       const initialPerceptions = {};
       data.enemies_picked.filter(Boolean).forEach((enemy, idx) => {
@@ -637,6 +651,61 @@ function App() {
     setShowMatchLogger(true);
   };
 
+  const handleLinkWithAPI = async () => {
+    if (!selectedMap || !myBrawler) {
+      triggerAlert("Error", "Please select your brawler before linking with API.", "error");
+      return;
+    }
+    setLinkingMatch(true);
+    try {
+      const payload = {
+        map_id: selectedMap.id,
+        my_brawler_id: myBrawler.id,
+        allies_picked: draft.allies_picked.filter(Boolean).map(b => b.id),
+        enemies_picked: draft.enemies_picked.filter(Boolean).map(b => b.id)
+      };
+      
+      const data = await api.linkDraftBattle(payload);
+      const fetchedSets = data.sets || [];
+      
+      if (fetchedSets.length > 0) {
+        setSets(fetchedSets);
+        const victoriesCount = fetchedSets.filter(s => s.result === 'victory').length;
+        const defeatsCount = fetchedSets.filter(s => s.result === 'defeat').length;
+        const overallResult = victoriesCount > defeatsCount ? 'victory' : 'defeat';
+        setMatchResult(overallResult);
+        
+        const lastSet = fetchedSets[fetchedSets.length - 1];
+        setApiMatchId(fetchedSets[0]?.api_match_id || null);
+        setMyBrawlerTrophies(lastSet ? lastSet.my_brawler_trophies : null);
+        setIsStarPlayer(fetchedSets.some(s => s.is_star_player));
+        
+        triggerAlert("Link Successful", `Found and linked ${fetchedSets.length} sets from your battle log!`, "success");
+      } else {
+        triggerAlert("Not Found", "No recent matching battle found in your battle log.", "warning");
+      }
+    } catch (err) {
+      console.error(err);
+      triggerAlert("Link Failed", err.message || "Failed to find a matching battle in your log.", "error");
+    } finally {
+      setLinkingMatch(false);
+    }
+  };
+
+  const handleLinkMatchAPI = async (matchId) => {
+    setLinkingMatchId(matchId);
+    try {
+      await api.linkMatchAPI(matchId);
+      loadUserStats();
+      triggerAlert("Match Linked", "Successfully linked match series with Brawl Stars API battle logs!", "success");
+    } catch (err) {
+      console.error(err);
+      triggerAlert("Linking Failed", err.message || "Failed to link match with API.", "error");
+    } finally {
+      setLinkingMatchId(null);
+    }
+  };
+
   const submitMatch = async () => {
     if (!selectedMap || !myBrawler) return;
 
@@ -672,22 +741,45 @@ function App() {
       addEvents(draft.allies_picked, 'pick', 'allied');
       addEvents(draft.enemies_picked, 'pick', 'enemy');
 
-      let savedMatch;
       if (editingMatchId) {
-        savedMatch = await api.updateMatch(editingMatchId, matchPayload);
+        // Edit flow
+        const savedMatch = await api.updateMatch(editingMatchId, matchPayload);
+        const matchId = savedMatch.id;
+        for (const [key, ratingVal] of Object.entries(opponentPerceptions)) {
+          const enemyId = key.split('-')[0];
+          await api.savePerception(matchId, myBrawler.id, enemyId, ratingVal);
+        }
       } else {
-        savedMatch = await api.saveMatch(matchPayload);
-      }
+        // Series / multi-set creation flow
+        const seriesPayload = {
+          map_id: selectedMap.id,
+          my_brawler_id: myBrawler.id,
+          mode: selectedMap.mode,
+          draft_type: draftType,
+          draft_events: matchPayload.draft_events,
+          perceptions: [],
+          sets: sets.length > 0 ? sets : [{
+            api_match_id: apiMatchId,
+            result: matchResult,
+            my_brawler_trophies: myBrawlerTrophies,
+            is_star_player: isStarPlayer
+          }]
+        };
 
-      const matchId = editingMatchId || savedMatch.id;
+        for (const [key, ratingVal] of Object.entries(opponentPerceptions)) {
+          const enemyId = key.split('-')[0];
+          seriesPayload.perceptions.push({
+            brawler_rival_id: enemyId,
+            value: ratingVal
+          });
+        }
 
-      for (const [key, ratingVal] of Object.entries(opponentPerceptions)) {
-        const enemyId = key.split('-')[0];
-        await api.savePerception(matchId, myBrawler.id, enemyId, ratingVal);
+        await api.submitMatchSeries(seriesPayload);
       }
 
       setShowMatchLogger(false);
       setEditingMatchId(null);
+      setSets([]);
       resetDraft();
       loadUserStats();
       triggerAlert(
@@ -1104,25 +1196,6 @@ function App() {
               <div className="history-section">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                   <h3 style={{ margin: 0 }}>Recent Matches</h3>
-                  <button
-                    className="btn btn-sm"
-                    onClick={handleSyncHistory}
-                    disabled={syncingHistory}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      border: '1px solid var(--border-glass)',
-                      color: 'var(--color-text)',
-                      fontSize: '11px',
-                      padding: '4px 8px',
-                      borderRadius: '6px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                  >
-                    {syncingHistory ? 'Syncing...' : '🔄 Sync API History'}
-                  </button>
                 </div>
                 <div className="match-list">
                   {displayedMatches.slice(0, 5).map((m) => (
@@ -1547,19 +1620,6 @@ function App() {
           <div className="action-buttons-row">
             <button className="btn btn-danger" onClick={resetDraft}>Reset Draft</button>
             <button
-              className="btn btn-warning"
-              onClick={ingestLastBattle}
-              disabled={ingesting}
-              style={{
-                background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
-                borderColor: '#f57c00',
-                color: '#fff',
-                marginLeft: '10px'
-              }}
-            >
-              {ingesting ? 'Ingesting...' : '⚡ Ingest Last Battle (API)'}
-            </button>
-            <button
               className="btn btn-primary"
               onClick={openLogMatch}
               disabled={!draft.allies_picked.some(Boolean)}
@@ -1938,6 +1998,31 @@ function App() {
                       <span className="result-badge" style={{ fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', background: m.result === 'victory' ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,127,0.15)', color: m.result === 'victory' ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
                         {m.result === 'victory' ? 'WIN' : 'LOSS'}
                       </span>
+                      {!m.api_match_id && (
+                        <button
+                          className="btn btn-sm btn-secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleLinkMatchAPI(m.id);
+                          }}
+                          disabled={linkingMatchId === m.id}
+                          style={{
+                            background: 'linear-gradient(135deg, #4caf50 0%, #2e7d32 100%)',
+                            borderColor: '#2e7d32',
+                            color: '#fff',
+                            padding: '4px 6px',
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            borderRadius: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}
+                        >
+                          {linkingMatchId === m.id ? 'Linking...' : '🔗 Link'}
+                        </button>
+                      )}
                       <button
                         className="btn-edit-match"
                         onClick={(e) => {
@@ -2008,6 +2093,31 @@ function App() {
                 ))}
               </select>
             </div>
+
+            {sets.length > 0 && (
+              <div className="sets-visualization-section" style={{ marginBottom: '16px', border: '1px solid var(--border-glass)', borderRadius: '8px', padding: '12px', background: 'rgba(0,0,0,0.2)' }}>
+                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: '#ffb703', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Detected Bo3 Sets ({sets.length})</span>
+                  <span style={{ fontSize: '0.75rem', color: '#aaa' }}>Linked to API</span>
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {sets.map((set, idx) => (
+                    <div key={`set-${idx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', borderLeft: `3px solid ${set.result === 'victory' ? '#4caf50' : '#f44336'}` }}>
+                      <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>Set {idx + 1}</span>
+                      <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: set.result === 'victory' ? '#4caf50' : '#f44336' }}>
+                        {set.result.toUpperCase()}
+                      </span>
+                      <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{set.my_brawler_trophies} Trophies</span>
+                      {set.is_star_player && (
+                        <span style={{ fontSize: '0.75rem', background: '#ffb703', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
+                          Star Player
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="opponents-rating-section">
               <h3>Faced Opponents: Subjective Rating</h3>

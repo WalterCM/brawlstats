@@ -10,6 +10,7 @@ class Match(models.Model):
     draft_type = models.CharField(max_length=20, default='normal')  # normal / ranked
     date = models.DateTimeField(auto_now_add=True)
     api_match_id = models.CharField(max_length=100, null=True, blank=True)
+    series_api_match_id = models.CharField(max_length=100, null=True, blank=True)
     my_brawler_trophies = models.IntegerField(null=True, blank=True)
     is_star_player = models.BooleanField(default=False)
 

@@ -860,6 +860,231 @@ class DraftAssistantTests(TestCase):
         shelly_sug4 = next(s for s in res4.json()['suggestions'] if s['brawler']['id'] == self.shelly.id)
         self.assertEqual(shelly_sug4['components']['B_matchup_factor'], 1.20)
 
+    @patch('requests.get')
+    def test_link_draft_ranked_sets(self, mock_get):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+
+        # Set up player, user
+        player = Player.objects.create(name="Sets Link Player", player_tag="#SETSTAG", supabase_auth_id="django-user-1234")
+        user = User.objects.create(username="user_1234")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        # Mock two sets of a ranked match with same composition, map, and times within 10 minutes
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'items': [
+                {
+                    'battleTime': '20260614T170200.000Z',
+                    'event': {'map': 'Stone Fort'},
+                    'battle': {
+                        'type': 'soloRanked',
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#SETSTAG', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY', 'trophies': 900}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.bull.id, 'name': 'BULL'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                },
+                {
+                    'battleTime': '20260614T170000.000Z',
+                    'event': {'map': 'Stone Fort'},
+                    'battle': {
+                        'type': 'soloRanked',
+                        'result': 'defeat',
+                        'teams': [
+                            [
+                                {'tag': '#SETSTAG', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY', 'trophies': 900}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.bull.id, 'name': 'BULL'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Link draft payload
+        payload = {
+            "map_id": self.stone_fort.id,
+            "my_brawler_id": self.shelly.id,
+            "allies_picked": [self.colt.id, self.bull.id],
+            "enemies_picked": [self.colt.id, self.colt.id, self.colt.id]
+        }
+
+        response = self.client.post(reverse('draft-link'), payload, content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['draft_type'], 'ranked')
+        self.assertEqual(len(data['sets']), 2)
+        self.assertEqual(data['sets'][0]['api_match_id'], '20260614T170000.000Z')
+        self.assertEqual(data['sets'][0]['result'], 'defeat')
+        self.assertEqual(data['sets'][1]['api_match_id'], '20260614T170200.000Z')
+        self.assertEqual(data['sets'][1]['result'], 'victory')
+
+    def test_submit_match_series(self):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+        from apps.matches.models import Match, DraftEvent
+        from apps.drafting.models import Perception
+
+        # Set up player, user
+        player = Player.objects.create(name="Series Submit Player", player_tag="#SERIESTAG", supabase_auth_id="django-user-5678")
+        user = User.objects.create(username="user_5678")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Submit match series payload
+        payload = {
+            "map_id": self.stone_fort.id,
+            "my_brawler_id": self.shelly.id,
+            "mode": "Gem Grab",
+            "draft_type": "ranked",
+            "draft_events": [
+                {"type": "pick", "brawler_id": self.shelly.id, "team": "allied", "order": 1},
+                {"type": "pick", "brawler_id": self.colt.id, "team": "enemy", "order": 2}
+            ],
+            "perceptions": [
+                {"brawler_rival_id": self.colt.id, "value": -1}
+            ],
+            "sets": [
+                {"api_match_id": "20260614T170000.000Z", "result": "defeat", "my_brawler_trophies": 900, "is_star_player": False},
+                {"api_match_id": "20260614T170200.000Z", "result": "victory", "my_brawler_trophies": 900, "is_star_player": True}
+            ]
+        }
+
+        # POST to submit-series endpoint (action on MatchViewSet, router resolves to match-submit-series)
+        url = reverse('match-list') + 'submit-series/'
+        response = self.client.post(url, payload, content_type='application/json')
+        self.assertEqual(response.status_code, 201)
+
+        # Verify matches created
+        matches = Match.objects.filter(player=player).order_by('api_match_id')
+        self.assertEqual(matches.count(), 2)
+        
+        # Both matches must share the same series_api_match_id (first set's API ID)
+        self.assertEqual(matches[0].series_api_match_id, "20260614T170000.000Z")
+        self.assertEqual(matches[1].series_api_match_id, "20260614T170000.000Z")
+        self.assertEqual(matches[0].result, "defeat")
+        self.assertEqual(matches[1].result, "victory")
+
+        # DraftEvents should now be logged on BOTH matches
+        self.assertEqual(DraftEvent.objects.filter(match=matches[0]).count(), 2)
+        self.assertEqual(DraftEvent.objects.filter(match=matches[1]).count(), 2)
+
+        self.assertEqual(Perception.objects.filter(match=matches[0]).count(), 1)
+        self.assertEqual(Perception.objects.filter(match=matches[1]).count(), 0)
+
+    @patch('requests.get')
+    def test_link_api_ranked_sets(self, mock_get):
+        from django.contrib.auth.models import User
+        from rest_framework.authtoken.models import Token
+        from apps.matches.models import Match, DraftEvent
+
+        # Set up player, user
+        player = Player.objects.create(name="API Link Player", player_tag="#SETSTAG", supabase_auth_id="django-user-987")
+        user = User.objects.create(username="user_987")
+        player.supabase_auth_id = f"django-user-{user.id}"
+        player.save()
+
+        # Mock two sets of a ranked match with same composition, map, and times within 10 minutes
+        mock_get.return_value.status_code = 200
+        mock_get.return_value.json.return_value = {
+            'items': [
+                {
+                    'battleTime': '20260614T170200.000Z',
+                    'event': {'map': 'Stone Fort'},
+                    'battle': {
+                        'type': 'soloRanked',
+                        'result': 'victory',
+                        'teams': [
+                            [
+                                {'tag': '#SETSTAG', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY', 'trophies': 900}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.bull.id, 'name': 'BULL'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                },
+                {
+                    'battleTime': '20260614T170000.000Z',
+                    'event': {'map': 'Stone Fort'},
+                    'battle': {
+                        'type': 'soloRanked',
+                        'result': 'defeat',
+                        'teams': [
+                            [
+                                {'tag': '#SETSTAG', 'brawler': {'id': self.shelly.id, 'name': 'SHELLY', 'trophies': 900}},
+                                {'tag': '#ALLY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ALLY2', 'brawler': {'id': self.bull.id, 'name': 'BULL'}}
+                            ],
+                            [
+                                {'tag': '#ENEMY1', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY2', 'brawler': {'id': self.colt.id, 'name': 'COLT'}},
+                                {'tag': '#ENEMY3', 'brawler': {'id': self.colt.id, 'name': 'COLT'}}
+                            ]
+                        ]
+                    }
+                }
+            ]
+        }
+
+        # Create manual unlinked match with draft events
+        match = Match.objects.create(
+            player=player,
+            map=self.stone_fort,
+            my_brawler=self.shelly,
+            mode="Gem Grab",
+            result="defeat",
+            draft_type="ranked"
+        )
+        # Create a draft pick event on the manual match
+        DraftEvent.objects.create(match=match, type="pick", brawler=self.shelly, team="allied", order=1)
+
+        token = Token.objects.create(user=user)
+        self.client.defaults['HTTP_AUTHORIZATION'] = f'Token {token.key}'
+
+        # Call link-api endpoint on the match
+        url = reverse('match-detail', kwargs={'pk': match.id}) + 'link-api/'
+        response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+
+        # Verify two matches now exist
+        matches = Match.objects.filter(player=player).order_by('api_match_id')
+        self.assertEqual(matches.count(), 2)
+
+        self.assertEqual(matches[0].api_match_id, '20260614T170000.000Z')
+        self.assertEqual(matches[1].api_match_id, '20260614T170200.000Z')
+
+        # Verify that BOTH matches have the copied draft pick event
+        self.assertEqual(DraftEvent.objects.filter(match=matches[0]).count(), 1)
+        self.assertEqual(DraftEvent.objects.filter(match=matches[1]).count(), 1)
+
 
 
 
