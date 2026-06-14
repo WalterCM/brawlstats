@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api, setGlobalActiveUser } from './services/api';
 import './App.css';
+import StatsDashboard from './StatsDashboard';
 
 const deduplicateMaps = (mapList) => {
   const seen = new Set();
@@ -38,16 +39,25 @@ function App() {
     isOpen: false,
     title: '',
     message: '',
-    type: 'info'
+    type: 'info',
+    onDismiss: null
   });
 
-  const triggerAlert = (title, message, type = 'info') => {
+  const triggerAlert = (title, message, type = 'info', onDismiss = null) => {
     setModalAlert({
       isOpen: true,
       title,
       message,
-      type
+      type,
+      onDismiss
     });
+  };
+
+  const handleCloseAlert = () => {
+    if (modalAlert.onDismiss) {
+      modalAlert.onDismiss();
+    }
+    setModalAlert(prev => ({ ...prev, isOpen: false, onDismiss: null }));
   };
   const [draftType, setDraftType] = useState('ranked'); // 'ranked' or 'normal'
   const [isLeftPanelCollapsed, setIsLeftPanelCollapsed] = useState(false);
@@ -683,7 +693,8 @@ function App() {
       triggerAlert(
         editingMatchId ? "Match Updated" : "Match Logged", 
         editingMatchId ? "Match data and matchup perceptions updated successfully!" : "Match and matchup perceptions logged successfully!", 
-        "success"
+        "success",
+        () => setCurrentView('menu')
       );
     } catch (err) {
       console.error(err);
@@ -996,6 +1007,11 @@ function App() {
             </button>
           )}
           {currentView === 'profile' && (
+            <button className="btn btn-secondary" onClick={() => setCurrentView('menu')}>
+              ◀ Back to Home
+            </button>
+          )}
+          {currentView === 'stats' && (
             <button className="btn btn-secondary" onClick={() => setCurrentView('menu')}>
               ◀ Back to Home
             </button>
@@ -1762,6 +1778,14 @@ function App() {
             </div>
           </div>
         </div>
+      ) : currentView === 'stats' ? (
+        <StatsDashboard 
+          matches={matches}
+          perceptions={perceptions}
+          brawlers={brawlers}
+          allMaps={allMaps}
+          onClose={() => setCurrentView('menu')}
+        />
       ) : (
         <div className="welcome-menu-container">
           <div className="welcome-card glass-panel">
@@ -1790,6 +1814,18 @@ function App() {
                 <div className="menu-card-details">
                   <h3>Normal Draft (No Bans)</h3>
                   <p>Draft without Bans using all available maps in the database.</p>
+                </div>
+              </button>
+              
+              <button 
+                className="menu-card btn-enter-draft stats-dashboard-btn" 
+                onClick={() => setCurrentView('stats')}
+                style={{ width: '100%', marginTop: '10px' }}
+              >
+                <div className="menu-card-icon">📊</div>
+                <div className="menu-card-details">
+                  <h3>Stats Dashboard</h3>
+                  <p>View game statistics, win rates, brawler performance, and more.</p>
                 </div>
               </button>
             </div>
@@ -2103,7 +2139,7 @@ function App() {
             animation: 'fadeIn 0.25s ease-out',
             zIndex: 1000 
           }}
-          onClick={() => setModalAlert(prev => ({ ...prev, isOpen: false }))}
+          onClick={handleCloseAlert}
         >
           <div 
             className="modal-content glass-panel" 
@@ -2167,7 +2203,7 @@ function App() {
                   letterSpacing: '0.5px',
                   width: 'auto'
                 }}
-                onClick={() => setModalAlert(prev => ({ ...prev, isOpen: false }))}
+                onClick={handleCloseAlert}
               >
                 Dismiss
               </button>

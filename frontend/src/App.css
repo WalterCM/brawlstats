@@ -1364,3 +1364,464 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+
+/* Stats Dashboard Styling */
+
+.menu-card.stats-dashboard-btn:hover {
+  border-color: #a855f7;
+  box-shadow: 0 8px 30px rgba(168, 85, 247, 0.2);
+}
+
+.stats-dashboard-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 100%;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+}
+
+.dashboard-title-section h2 {
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0;
+  background: linear-gradient(135deg, #fff, #a855f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.filter-center {
+  padding: 15px 25px;
+}
+
+.filter-group-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: center;
+}
+
+.filter-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 180px;
+}
+
+.filter-control label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.filter-control select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  color: #fff;
+  padding: 10px 14px;
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.filter-control select:focus, .filter-control select:hover {
+  border-color: #a855f7;
+}
+
+.timeframe-buttons {
+  display: flex;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.time-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition-fast);
+  white-space: nowrap;
+}
+
+.time-btn:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.03);
+}
+
+.time-btn.active {
+  background: #a855f7;
+  color: #fff;
+  font-weight: 700;
+}
+
+/* KPI Cards */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
+}
+
+.kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 20px;
+}
+
+.kpi-icon-wrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-glass);
+  flex-shrink: 0;
+}
+
+.kpi-details {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.kpi-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.kpi-label {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.kpi-subtext {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+.kpi-bar-track {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.kpi-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease-out;
+}
+
+/* Color Accents */
+.circle-ally { border-color: var(--color-ally); color: var(--color-ally); }
+.circle-enemy { border-color: var(--color-enemy); color: var(--color-enemy); }
+.circle-gold { border-color: var(--color-gold); color: var(--color-gold); }
+.circle-blue { border-color: #2196f3; color: #2196f3; }
+.circle-grey { border-color: var(--color-text-muted); color: var(--color-text-muted); }
+
+.ally-bg { background: var(--color-ally); }
+.enemy-bg { background: var(--color-enemy); }
+.gold-bg { background: var(--color-gold); }
+
+/* Main dashboard layout */
+.dashboard-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 20px;
+}
+
+@media (max-width: 1100px) {
+  .dashboard-main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.dashboard-section {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-section h3 {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 15px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.section-header h3 {
+  margin: 0;
+}
+
+.sort-buttons {
+  display: flex;
+  gap: 6px;
+}
+
+/* Stats Table */
+.table-wrapper {
+  overflow-x: auto;
+  flex-grow: 1;
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.stats-table th {
+  padding: 10px 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--border-glass);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+.stats-table td {
+  padding: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  vertical-align: middle;
+}
+
+.stats-table tr:hover td {
+  background: rgba(255,255,255,0.01);
+}
+
+.brawler-td {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brawler-avatar-small {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1.5px solid var(--border-glass);
+}
+
+.brawler-avatar-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.brawler-name-td {
+  font-weight: 700;
+  color: #fff;
+}
+
+.class-td {
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
+.games-td {
+  font-weight: 700;
+  color: #fff;
+}
+
+.winrate-td {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100px;
+}
+
+.winrate-td span {
+  font-weight: 700;
+}
+
+.win-color {
+  color: var(--color-ally);
+}
+
+.loss-color {
+  color: var(--color-enemy);
+}
+
+.micro-bar {
+  height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 1.5px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.micro-fill {
+  height: 100%;
+  border-radius: 1.5px;
+}
+
+.mvp-badge {
+  background: rgba(255, 183, 0, 0.15);
+  color: var(--color-gold);
+  border: 1px solid rgba(255, 183, 0, 0.3);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+/* Sidebar stats */
+.dashboard-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.game-modes-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.game-mode-stat-card {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  padding: 12px 15px;
+}
+
+.mode-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.mode-name {
+  font-weight: 700;
+  color: #fff;
+  font-size: 13px;
+}
+
+.mode-games {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.mode-winrate-pct {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  width: 50px;
+  text-align: right;
+}
+
+/* Map rows */
+.maps-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.map-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.01);
+  border: 1px solid rgba(255,255,255,0.03);
+  border-radius: 8px;
+}
+
+.map-detail {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.map-name-lbl {
+  font-weight: 700;
+  color: #fff;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-mode-lbl {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+.map-games-metric {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.map-games-metric span:first-child {
+  color: var(--color-text-muted);
+}
+
+.map-wr-badge {
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.win-badge {
+  background: rgba(0, 229, 255, 0.15);
+  color: var(--color-ally);
+}
+
+.loss-badge {
+  background: rgba(255, 0, 85, 0.15);
+  color: var(--color-enemy);
+}

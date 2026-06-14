@@ -100,12 +100,12 @@ class DraftSuggestionView(views.APIView):
                             # Fallback to global brawler stats with reduced weight of 0.6
                             meta_brawler = MetaBrawlerStats.objects.filter(brawler=b).latest('date')
                             win_rate_meta = meta_brawler.win_rate * 0.6
-                            pick_rate_meta = 0.0
+                            pick_rate_meta = meta_brawler.pick_rate
                         except MetaBrawlerStats.DoesNotExist:
                             win_rate_meta = 0.5 * 0.6
-                            pick_rate_meta = 0.0
+                            pick_rate_meta = 0.01
 
-            k_prior = 20.0
+            k_prior = 8.0
             alpha_prior = win_rate_meta * k_prior
             beta_prior = (1.0 - win_rate_meta) * k_prior
 
