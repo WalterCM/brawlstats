@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 
-export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], onClose }) {
+export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], onClose, onBrawlerClick }) {
   // Filter States
   const [selectedMode, setSelectedMode] = useState('All');
   const [selectedDraftType, setSelectedDraftType] = useState('All');
@@ -96,8 +96,10 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
     const wins = filteredMatches.filter(m => m.result === 'victory').length;
     const mvps = filteredMatches.filter(m => m.is_star_player).length;
 
-    // Average trophies
-    const trophyMatches = filteredMatches.filter(m => m.my_brawler_trophies !== null && m.my_brawler_trophies > 0);
+    // Average trophies — ONLY normal matches (ranked reports rank level, not real trophies)
+    const trophyMatches = filteredMatches.filter(
+      m => m.my_brawler_trophies !== null && m.my_brawler_trophies > 50 && m.draft_type === 'normal'
+    );
     const avgTrophies = trophyMatches.length > 0
       ? Math.round(trophyMatches.reduce((acc, m) => acc + m.my_brawler_trophies, 0) / trophyMatches.length)
       : 0;
@@ -120,12 +122,17 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       }
     }
 
+    // Only show streak if it's a win streak
+    const streakDisplay = streakType === 'W'
+      ? `${streakCount} Win${streakCount > 1 ? 's' : ''}`
+      : null;
+
     return {
       winRate: Math.round((wins / total) * 100),
       total,
       mvpRate: Math.round((mvps / total) * 100),
       avgTrophies,
-      streak: `${streakCount} ${streakType === 'W' ? 'Win' : 'Loss'}${streakCount > 1 ? 's' : ''}`
+      streak: streakDisplay
     };
   }, [filteredMatches]);
 
@@ -222,67 +229,64 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       .slice(0, 8); // Top 8 maps
   }, [filteredMatches, getMapName]);
 
-  // 6. Matchup Comforts summary
-  const perceptionStats = useMemo(() => {
-    // Filter perceptions corresponding to the filtered matches
-    const matchIds = new Set(filteredMatches.map(m => m.id));
-    const relevantPerceptions = perceptions.filter(p => matchIds.has(p.match_id));
+  // 6. Result Strip — oldest to latest (left to right)
+  const resultStrip = useMemo(() => {
+    return [...filteredMatches]
+      .sort((a, b) => new Date(a.date) - new Date(b.date)) // oldest first
+      .slice(-40); // take last 40
+  }, [filteredMatches]);
 
-    const counts = { Easy: 0, Neutral: 0, Hard: 0, Counter: 0 };
-    const rivalScores = {};
+  // 7. Rolling win rate (window of 5)
+  const rollingWinRate = useMemo(() => {
+    const sorted = [...filteredMatches].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const windowSize = 5;
+    const pts = [];
+    for (let i = windowSize - 1; i < sorted.length; i++) {
+      const w = sorted.slice(Math.max(0, i - windowSize + 1), i + 1);
+      pts.push(Math.round((w.filter(m => m.result === 'victory').length / w.length) * 100));
+    }
+    return pts;
+  }, [filteredMatches]);
 
-    relevantPerceptions.forEach(p => {
-      if (p.value === 1) counts.Easy++;
-      else if (p.value === 0) counts.Neutral++;
-      else if (p.value === -1) counts.Hard++;
-      else if (p.value === -2) counts.Counter++;
+  // 8. Draft pick/ban frequency from ranked matches
+  const draftFrequency = useMemo(() => {
+    const freq = {};
+    filteredMatches
+      .filter(m => m.draft_type === 'ranked')
+      .forEach(m => {
+        (m.draft_events || []).forEach(evt => {
+          const key = `${evt.brawler_id}__${evt.type}__${evt.team}`;
+          if (!freq[key]) freq[key] = { brawler_id: evt.brawler_id, type: evt.type, team: evt.team, count: 0 };
+          freq[key].count++;
+        });
+      });
+    return Object.values(freq).sort((a, b) => b.count - a.count);
+  }, [filteredMatches]);
 
-      const rival = p.brawler_rival_id;
-      if (!rivalScores[rival]) {
-        rivalScores[rival] = { id: rival, name: getBrawlerName(rival), avatar: getBrawlerAvatar(rival), sum: 0, count: 0 };
-      }
-      rivalScores[rival].sum += p.value;
-      rivalScores[rival].count++;
-    });
+  const topPicks = useMemo(() => {
+    const picks = draftFrequency.filter(d => d.type === 'pick');
+    const alliedPicks = picks.filter(d => d.team === 'allied').slice(0, 6);
+    const enemyPicks = picks.filter(d => d.team === 'enemy').slice(0, 6);
+    const bans = draftFrequency.filter(d => d.type === 'ban').slice(0, 6);
+    return { allied: alliedPicks, enemy: enemyPicks, bans };
+  }, [draftFrequency]);
 
-    // Find toughest rival brawlers (lowest average comfort)
-    const toughest = Object.values(rivalScores)
-      .filter(r => r.count >= 1)
-      .map(r => ({
-        ...r,
-        avg: parseFloat((r.sum / r.count).toFixed(2))
-      }))
-      .sort((a, b) => a.avg - b.avg) // Lowest rating first
-      .slice(0, 5);
-
-    // Find easiest rival brawlers (highest average comfort)
-    const easiest = Object.values(rivalScores)
-      .filter(r => r.count >= 1)
-      .map(r => ({
-        ...r,
-        avg: parseFloat((r.sum / r.count).toFixed(2))
-      }))
-      .sort((a, b) => b.avg - a.avg) // Highest rating first
-      .slice(0, 5);
-
-    return {
-      total: relevantPerceptions.length,
-      counts,
-      toughest,
-      easiest
-    };
-  }, [filteredMatches, perceptions, getBrawlerName, getBrawlerAvatar]);
+  const maxPickCount = useMemo(() => Math.max(
+    ...topPicks.allied.map(d => d.count),
+    ...topPicks.enemy.map(d => d.count),
+    ...topPicks.bans.map(d => d.count),
+    1
+  ), [topPicks]);
 
   return (
     <div className="stats-dashboard-container">
-      {/* Header with Exit button */}
-      <div className="dashboard-header glass-panel">
+      <div className="dashboard-header glass-panel" style={{ position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(20px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div className="dashboard-title-section">
           <h2>📊 Personal Stats Dashboard</h2>
-          <p className="welcome-subtitle">Advanced Analytics & Match History Insights</p>
+          <p className="welcome-subtitle">Advanced Analytics &amp; Match History Insights</p>
         </div>
         <button className="btn btn-secondary" onClick={onClose}>
-          ◀ Back to Main Menu
+          ◀ Back to Home
         </button>
       </div>
 
@@ -379,20 +383,97 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
           <div className="kpi-icon-wrapper circle-blue">🏆</div>
           <div className="kpi-details">
             <span className="kpi-value">{kpis.avgTrophies || 'N/A'}</span>
-            <span className="kpi-label">Avg Trawler Trophies</span>
-            <span className="kpi-subtext">For logged games</span>
+            <span className="kpi-label">Avg Brawler Trophies</span>
+            <span className="kpi-subtext">Normal matches only</span>
           </div>
         </div>
 
-        <div className="kpi-card glass-panel glow-enemy">
-          <div className="kpi-icon-wrapper circle-enemy">🔥</div>
-          <div className="kpi-details">
-            <span className="kpi-value">{kpis.streak}</span>
-            <span className="kpi-label">Current Streak</span>
-            <span className="kpi-subtext">Active Match Sequence</span>
+        {kpis.streak && (
+          <div className="kpi-card glass-panel glow-enemy">
+            <div className="kpi-icon-wrapper circle-enemy">🔥</div>
+            <div className="kpi-details">
+              <span className="kpi-value">{kpis.streak}</span>
+              <span className="kpi-label">Win Streak 🔥</span>
+              <span className="kpi-subtext">Active winning sequence</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Result Strip */}
+      {resultStrip.length > 0 && (
+        <div className="glass-panel" style={{ padding: '16px 20px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <h3 style={{ margin: 0, fontSize: '14px' }}>🟢🔴 Match History Strip</h3>
+            <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>Oldest → Latest</span>
+          </div>
+          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+            {resultStrip.map((m, i) => {
+              const isWin = m.result === 'victory';
+              const bName = getBrawlerName(m.my_brawler_id);
+              const mapName = allMaps.find(mp => String(mp.id) === String(m.map_id))?.name || '';
+              return (
+                <div
+                  key={`strip-${m.id}-${i}`}
+                  title={`${isWin ? 'WIN' : 'LOSS'} · ${bName} · ${mapName}`}
+                  style={{
+                    width: '18px', height: '28px', borderRadius: '3px',
+                    background: isWin ? 'var(--color-ally)' : 'var(--color-enemy)',
+                    opacity: 0.85,
+                    cursor: 'default',
+                    flexShrink: 0,
+                    position: 'relative',
+                    transition: 'transform 0.15s, opacity 0.15s'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'scaleY(1.2)'; e.currentTarget.style.opacity = '1'; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'scaleY(1)'; e.currentTarget.style.opacity = '0.85'; }}
+                />
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Rolling Win Rate */}
+      {rollingWinRate.length >= 2 && (
+        <div className="glass-panel" style={{ padding: '16px 20px', marginBottom: '20px' }}>
+          <h3 style={{ margin: '0 0 4px' }}>📈 Rolling Win Rate (Window of 5)</h3>
+          <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '0 0 12px' }}>
+            Win rate of your last 5 games at each point — shows recent momentum, not overall WR.
+            Overall WR ({kpis.winRate}%) shown as solid line.
+          </p>
+          {(() => {
+            const pts = rollingWinRate;
+            const overallWR = kpis.winRate;
+            const h = 110, w = 600, padX = 36, padY = 16;
+            const cW = w - padX * 2, cH = h - padY * 2;
+            const toX = (i) => padX + (i / Math.max(pts.length - 1, 1)) * cW;
+            const toY = (v) => padY + cH - (v / 100) * cH;
+            const polyline = pts.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
+            const area = `${toX(0)},${toY(0)} ${polyline} ${toX(pts.length - 1)},${toY(0)}`;
+            const lastVal = pts[pts.length - 1];
+            const lineColor = lastVal >= 50 ? '#00e5ff' : '#ff4081';
+            return (
+              <svg width="100%" viewBox={`0 0 ${w} ${h}`} style={{ overflow: 'visible' }}>
+                {/* 50% baseline */}
+                <line x1={padX} y1={toY(50)} x2={w - padX} y2={toY(50)} stroke="rgba(255,255,255,0.12)" strokeWidth="1" strokeDasharray="5 4" />
+                {/* Overall WR line */}
+                <line x1={padX} y1={toY(overallWR)} x2={w - padX} y2={toY(overallWR)} stroke="#ffd166" strokeWidth="1.5" strokeDasharray="8 4" opacity="0.6" />
+                <text x={w - padX + 4} y={toY(overallWR) + 4} fill="#ffd166" fontSize="9" opacity="0.8">Overall</text>
+                {/* Y labels */}
+                <text x={padX - 4} y={toY(100) + 4} fill="rgba(255,255,255,0.3)" fontSize="9" textAnchor="end">100%</text>
+                <text x={padX - 4} y={toY(50) + 4} fill="rgba(255,255,255,0.3)" fontSize="9" textAnchor="end">50%</text>
+                <text x={padX - 4} y={toY(0) + 4} fill="rgba(255,255,255,0.3)" fontSize="9" textAnchor="end">0%</text>
+                {/* Area + line */}
+                <polygon points={area} fill={lineColor} fillOpacity="0.08" />
+                <polyline points={polyline} fill="none" stroke={lineColor} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+                <circle cx={toX(pts.length - 1)} cy={toY(lastVal)} r="4" fill={lineColor} />
+                <text x={toX(pts.length - 1) + 6} y={toY(lastVal) + 4} fill={lineColor} fontSize="10" fontWeight="bold">{lastVal}%</text>
+              </svg>
+            );
+          })()}
+        </div>
+      )}
 
       {/* Main Stats Layout Grid */}
       <div className="dashboard-main-grid">
@@ -440,7 +521,13 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                 </thead>
                 <tbody>
                   {brawlerStats.map(b => (
-                    <tr key={b.id}>
+                    <tr
+                      key={b.id}
+                      onClick={() => onBrawlerClick && onBrawlerClick(b.id)}
+                      style={{ cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                      onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.background = 'rgba(0,229,255,0.06)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = ''; }}
+                    >
                       <td>
                         <div className="brawler-td">
                           {b.avatar ? (
@@ -538,87 +625,77 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
             </div>
           </div>
 
-          {/* Matchup Subjective Perceptions */}
-          <div className="dashboard-section glass-panel" style={{ marginTop: '20px' }}>
-            <h3>Matchup Comfort Profiles</h3>
-            <p className="welcome-subtitle" style={{ fontSize: '11px', marginBottom: '12px' }}>
-              Aggregated feelings from manual match logs
-            </p>
+          {/* Draft Pick/Ban Frequency — Ranked Meta Insights */}
+          {topPicks.allied.length > 0 && (
+            <div className="dashboard-section glass-panel" style={{ marginTop: '20px' }}>
+              <h3>🎯 Ranked Meta Insights</h3>
+              <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 14px' }}>Most frequent picks & bans in ranked drafts</p>
 
-            {perceptionStats.total === 0 ? (
-              <div className="empty-msg">No perceptions logged in matches.</div>
-            ) : (
-              <div>
-                {/* Distribution bars */}
-                <div className="comfort-distribution" style={{ display: 'flex', height: '16px', borderRadius: '4px', overflow: 'hidden', marginBottom: '20px' }}>
-                  {Object.entries(perceptionStats.counts).map(([label, count]) => {
-                    const pct = perceptionStats.total > 0 ? (count / perceptionStats.total) * 100 : 0;
-                    if (pct === 0) return null;
-                    const colors = {
-                      Easy: '#00e5ff',
-                      Neutral: '#9ca3af',
-                      Hard: '#ff6699',
-                      Counter: '#ff0055'
-                    };
+              {topPicks.allied.length > 0 && (
+                <div style={{ marginBottom: '14px' }}>
+                  <h4 style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-ally)', marginBottom: '8px' }}>Allied Picks</h4>
+                  {topPicks.allied.map(d => {
+                    const b = brawlers.find(br => String(br.id) === String(d.brawler_id));
                     return (
-                      <div
-                        key={label}
-                        style={{ width: `${pct}%`, background: colors[label] }}
-                        title={`${label}: ${count} logged (${Math.round(pct)}%)`}
-                      ></div>
+                      <div key={`ap-${d.brawler_id}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+                        {b?.image_url && <img src={b.image_url} alt={b?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', border: '1.5px solid var(--color-ally)' }} />}
+                        <span style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b?.name || '?'}</span>
+                        <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                          <div style={{ width: `${(d.count / maxPickCount) * 100}%`, height: '100%', borderRadius: '3px', background: 'var(--color-ally)' }} />
+                        </div>
+                        <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{d.count}x</span>
+                      </div>
                     );
                   })}
                 </div>
+              )}
 
-                <div className="comfort-legend" style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '15px' }}>
-                  <span>🔵 Easy ({perceptionStats.counts.Easy})</span>
-                  <span>⚪ Neutral ({perceptionStats.counts.Neutral})</span>
-                  <span>💗 Hard ({perceptionStats.counts.Hard})</span>
-                  <span>🔴 Counter ({perceptionStats.counts.Counter})</span>
+              {topPicks.enemy.length > 0 && (
+                <div style={{ marginBottom: '14px' }}>
+                  <h4 style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-enemy)', marginBottom: '8px' }}>Enemy Picks</h4>
+                  {topPicks.enemy.map(d => {
+                    const b = brawlers.find(br => String(br.id) === String(d.brawler_id));
+                    return (
+                      <div key={`ep-${d.brawler_id}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+                        {b?.image_url && <img src={b.image_url} alt={b?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', border: '1.5px solid var(--color-enemy)' }} />}
+                        <span style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b?.name || '?'}</span>
+                        <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                          <div style={{ width: `${(d.count / maxPickCount) * 100}%`, height: '100%', borderRadius: '3px', background: 'var(--color-enemy)' }} />
+                        </div>
+                        <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{d.count}x</span>
+                      </div>
+                    );
+                  })}
                 </div>
+              )}
 
-                {/* Easiest Matchups */}
-                {perceptionStats.easiest.length > 0 && (
-                  <div className="comfort-top-list" style={{ marginBottom: '15px' }}>
-                    <h4 style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-ally)', marginBottom: '8px' }}>
-                      Easiest Matchups (Avg Rating)
-                    </h4>
-                    {perceptionStats.easiest.map(r => (
-                      <div key={`easy-rival-${r.id}`} className="rival-rating-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', marginBottom: '5px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <img src={r.avatar} alt={r.name} style={{ width: '18px', height: '18px', borderRadius: '50%' }} />
-                          <span>{r.name}</span>
+              {topPicks.bans.length > 0 && (
+                <div>
+                  <h4 style={{ fontSize: '10px', textTransform: 'uppercase', color: '#ffb703', marginBottom: '8px' }}>Most Banned</h4>
+                  {topPicks.bans.map(d => {
+                    const b = brawlers.find(br => String(br.id) === String(d.brawler_id));
+                    return (
+                      <div key={`bn-${d.brawler_id}-${d.team}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+                        {b?.image_url && <img src={b.image_url} alt={b?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', border: '1.5px solid #ffb703', filter: 'grayscale(0.4)' }} />}
+                        <span style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b?.name || '?'}</span>
+                        <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                          <div style={{ width: `${(d.count / maxPickCount) * 100}%`, height: '100%', borderRadius: '3px', background: '#ffb703' }} />
                         </div>
-                        <span style={{ fontWeight: 'bold', color: 'var(--color-ally)' }}>
-                          +{r.avg.toFixed(1)} ({r.count}x)
-                        </span>
+                        <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{d.count}x</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
-                {/* Hardest Matchups */}
-                {perceptionStats.toughest.length > 0 && (
-                  <div className="comfort-top-list">
-                    <h4 style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--color-enemy)', marginBottom: '8px' }}>
-                      Hardest Opponent Rivals (Avg Rating)
-                    </h4>
-                    {perceptionStats.toughest.map(r => (
-                      <div key={`hard-rival-${r.id}`} className="rival-rating-row" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', marginBottom: '5px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <img src={r.avatar} alt={r.name} style={{ width: '18px', height: '18px', borderRadius: '50%' }} />
-                          <span>{r.name}</span>
-                        </div>
-                        <span style={{ fontWeight: 'bold', color: 'var(--color-enemy)' }}>
-                          {r.avg.toFixed(1)} ({r.count}x)
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {/* Hint for brawler profiles */}
+          {onBrawlerClick && (
+            <div style={{ marginTop: '20px', padding: '12px 16px', borderRadius: '8px', background: 'rgba(0,229,255,0.06)', border: '1px solid rgba(0,229,255,0.15)', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+              💡 Click any brawler in the table to view their detailed profile
+            </div>
+          )}
 
         </div>
 

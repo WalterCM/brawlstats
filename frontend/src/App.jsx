@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api, setGlobalActiveUser } from './services/api';
 import './App.css';
 import StatsDashboard from './StatsDashboard';
+import BrawlerProfile from './BrawlerProfile';
 
 const deduplicateMaps = (mapList) => {
   const seen = new Set();
@@ -22,7 +23,8 @@ function App() {
 
   const [me, setMe] = useState(null);
   const [authError, setAuthError] = useState('');
-  const [currentView, setCurrentView] = useState('menu'); // 'menu' or 'draft'
+  const [currentView, setCurrentView] = useState('menu'); // 'menu' | 'draft' | 'stats' | 'profile' | 'brawler-profile'
+  const [selectedProfileBrawlerId, setSelectedProfileBrawlerId] = useState(null);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
 
   // Connection State
@@ -1103,11 +1105,7 @@ function App() {
               ◀ Back to Home
             </button>
           )}
-          {currentView === 'stats' && (
-            <button className="btn btn-secondary" onClick={() => setCurrentView('menu')}>
-              ◀ Back to Home
-            </button>
-          )}
+
 
           {/* Dynamic User Profile Selector */}
           <div className="profile-selector-menu">
@@ -1839,12 +1837,25 @@ function App() {
           </div>
         </div>
       ) : currentView === 'stats' ? (
-        <StatsDashboard 
+        <StatsDashboard
           matches={matches}
           perceptions={perceptions}
           brawlers={brawlers}
           allMaps={allMaps}
           onClose={() => setCurrentView('menu')}
+          onBrawlerClick={(brawlerId) => {
+            setSelectedProfileBrawlerId(brawlerId);
+            setCurrentView('brawler-profile');
+          }}
+        />
+      ) : currentView === 'brawler-profile' ? (
+        <BrawlerProfile
+          brawlerId={selectedProfileBrawlerId}
+          matches={matches}
+          perceptions={perceptions}
+          brawlers={brawlers}
+          allMaps={allMaps}
+          onBack={() => setCurrentView('stats')}
         />
       ) : (
         <div className="welcome-menu-container">
