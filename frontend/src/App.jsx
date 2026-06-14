@@ -1689,6 +1689,21 @@ function App() {
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button
                   className="btn btn-sm"
+                  onClick={handleSyncHistory}
+                  disabled={syncingHistory}
+                  style={{
+                    background: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
+                    borderColor: '#1976d2',
+                    color: '#fff',
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    fontWeight: '600'
+                  }}
+                >
+                  {syncingHistory ? 'Syncing...' : '🔄 Sync API History'}
+                </button>
+                <button
+                  className="btn btn-sm"
                   onClick={ingestLastBattle}
                   disabled={ingesting}
                   style={{
