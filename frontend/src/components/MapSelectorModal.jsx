@@ -1,10 +1,79 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-const MODES = ['All', 'Brawl Ball', 'Gem Grab', 'Heist', 'Hot Zone', 'Knockout', 'Bounty'];
+const MODE_CONFIG = {
+  'All': {
+    icon: '🗺️',
+    color: '#9ca3af',
+    glow: 'rgba(156, 163, 175, 0.3)',
+    gradient: 'linear-gradient(135deg, #4b5563, #374151)',
+  },
+  'Brawl Ball': {
+    icon: '⚽',
+    color: '#00e5ff',
+    glow: 'rgba(0, 229, 255, 0.35)',
+    gradient: 'linear-gradient(135deg, #00e5ff, #0077ff)',
+  },
+  'Gem Grab': {
+    icon: '💎',
+    color: '#a855f7',
+    glow: 'rgba(168, 85, 247, 0.35)',
+    gradient: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+  },
+  'Heist': {
+    icon: '💰',
+    color: '#c084fc',
+    glow: 'rgba(192, 132, 252, 0.35)',
+    gradient: 'linear-gradient(135deg, #c084fc, #a78bfa)',
+  },
+  'Hot Zone': {
+    icon: '🔥',
+    color: '#ef4444',
+    glow: 'rgba(239, 68, 68, 0.35)',
+    gradient: 'linear-gradient(135deg, #ef4444, #dc2626)',
+  },
+  'Knockout': {
+    icon: '💀',
+    color: '#f59e0b',
+    glow: 'rgba(245, 158, 11, 0.35)',
+    gradient: 'linear-gradient(135deg, #f59e0b, #d97706)',
+  },
+  'Bounty': {
+    icon: '⭐',
+    color: '#fbbf24',
+    glow: 'rgba(251, 191, 36, 0.35)',
+    gradient: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+  },
+};
+
+const MODES = Object.keys(MODE_CONFIG);
+
+const getModeConfig = (mode) => {
+  const key = Object.keys(MODE_CONFIG).find(
+    k => k.toLowerCase() === mode?.toLowerCase()
+  );
+  return key ? MODE_CONFIG[key] : { icon: '⚔️', color: '#9ca3af', glow: 'rgba(156,163,175,0.3)', gradient: 'linear-gradient(135deg, #4b5563, #374151)' };
+};
 
 const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) => {
   const [filterMode, setFilterMode] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const searchRef = useRef(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      setSearchQuery('');
+      setTimeout(() => searchRef.current?.focus(), 100);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -13,73 +82,130 @@ const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) =
     .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <div className="map-selector-modal-backdrop" onClick={onClose}>
-      <div className="map-selector-modal glass-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="map-modal-header">
-          <h2>Select Map</h2>
-          <button className="close-btn" onClick={onClose}>&times;</button>
+    <div className="msm-backdrop" onClick={onClose}>
+      <div className="msm-panel glass-panel" onClick={(e) => e.stopPropagation()}>
+
+        {/* ── Header ── */}
+        <div className="msm-header">
+          <div className="msm-header-left">
+            <span className="msm-header-icon">🗺️</span>
+            <div>
+              <h2 className="msm-title">Select Map</h2>
+              <p className="msm-subtitle">
+                {filteredMaps.length} map{filteredMaps.length !== 1 ? 's' : ''} available
+              </p>
+            </div>
+          </div>
+          <button className="msm-close-btn" onClick={onClose} title="Close (Esc)">
+            ✕
+          </button>
         </div>
 
-        <div className="map-modal-tabs">
-          {MODES.map(mode => (
-            <button
-              key={mode}
-              type="button"
-              className={`map-tab-btn ${filterMode === mode ? 'active' : ''}`}
-              onClick={() => setFilterMode(mode)}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-
-        <div className="map-search-bar" style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-glass)', flexShrink: 0 }}>
+        {/* ── Search Bar ── */}
+        <div className="msm-search-wrapper">
+          <span className="msm-search-icon">🔍</span>
           <input
+            ref={searchRef}
             type="text"
-            placeholder="Search map by name..."
+            className="msm-search-input"
+            placeholder="Search by map name…"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="search-input"
-            style={{
-              width: '100%',
-              padding: '10px 16px',
-              fontSize: '0.9rem',
-              borderRadius: '8px',
-              border: '1px solid var(--border-glass)',
-              background: 'rgba(0,0,0,0.2)',
-              color: '#fff',
-              outline: 'none',
-              transition: 'all 0.2s ease'
-            }}
           />
+          {searchQuery && (
+            <button className="msm-search-clear" onClick={() => setSearchQuery('')}>✕</button>
+          )}
         </div>
 
-        <div className="map-modal-content">
-          <div className="map-grid">
-            {filteredMaps.map(m => (
-              <div
-                key={m.id}
-                className={`map-card ${selectedMap?.id === m.id ? 'active' : ''}`}
-                onClick={() => {
-                  onSelectMap(m);
-                  onClose();
-                }}
+        {/* ── Mode Tabs ── */}
+        <div className="msm-tabs">
+          {MODES.map(mode => {
+            const cfg = MODE_CONFIG[mode];
+            const isActive = filterMode === mode;
+            return (
+              <button
+                key={mode}
+                type="button"
+                className={`msm-tab ${isActive ? 'msm-tab--active' : ''}`}
+                style={isActive ? {
+                  background: cfg.gradient,
+                  borderColor: 'transparent',
+                  boxShadow: `0 0 14px ${cfg.glow}`,
+                  color: '#fff',
+                } : {}}
+                onClick={() => setFilterMode(mode)}
               >
-                <div className="map-card-img-wrapper">
-                  {m.image_url ? (
-                    <img src={m.image_url} alt={m.name} />
-                  ) : (
-                    <div className="map-placeholder">No Image</div>
-                  )}
-                </div>
-                <div className="map-card-info">
-                  <span className="map-card-name">{m.name}</span>
-                  <span className="map-card-mode">{m.mode}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+                <span className="msm-tab-icon">{cfg.icon}</span>
+                <span className="msm-tab-label">{mode}</span>
+              </button>
+            );
+          })}
         </div>
+
+        {/* ── Map Grid ── */}
+        <div className="msm-grid-wrapper">
+          {filteredMaps.length === 0 ? (
+            <div className="msm-empty">
+              <span>🔍</span>
+              <p>No maps match your search.</p>
+            </div>
+          ) : (
+            <div className="msm-grid">
+              {filteredMaps.map(m => {
+                const cfg = getModeConfig(m.mode);
+                const isSelected = selectedMap?.id === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    className={`msm-card ${isSelected ? 'msm-card--selected' : ''}`}
+                    style={isSelected ? {
+                      borderColor: cfg.color,
+                      boxShadow: `0 0 18px ${cfg.glow}, inset 0 0 0 1px ${cfg.color}40`,
+                    } : {}}
+                    onClick={() => {
+                      onSelectMap(m);
+                      onClose();
+                    }}
+                  >
+                    {/* Map Image */}
+                    <div className="msm-card-img-wrapper">
+                      {m.image_url ? (
+                        <img src={m.image_url} alt={m.name} className="msm-card-img" />
+                      ) : (
+                        <div className="msm-card-img-placeholder">No Image</div>
+                      )}
+
+                      {/* Mode badge overlay */}
+                      <div
+                        className="msm-mode-badge"
+                        style={{ background: cfg.gradient }}
+                      >
+                        {cfg.icon} {m.mode}
+                      </div>
+
+                      {/* Selected checkmark */}
+                      {isSelected && (
+                        <div
+                          className="msm-selected-overlay"
+                          style={{ background: `${cfg.color}20`, borderColor: cfg.color }}
+                        >
+                          <div className="msm-checkmark" style={{ color: cfg.color }}>✓</div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card Footer */}
+                    <div className="msm-card-footer">
+                      <span className="msm-card-name">{m.name}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );

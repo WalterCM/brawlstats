@@ -3,7 +3,8 @@ import { api, setGlobalActiveUser } from './services/api';
 import './App.css';
 import StatsDashboard from './StatsDashboard';
 import BrawlerProfile from './BrawlerProfile';
-import { deduplicateMaps, getMapName, getBrawlerName, getBrawlerAvatar, getModeIcon } from './utils/helpers';
+import MapProfile from './MapProfile';
+import { deduplicateMaps, getMapName, getBrawlerName, getBrawlerAvatar, getModeIcon, getRankById, getRankIconUrl } from './utils/helpers';
 import MatchTeamsBanner from './components/MatchTeamsBanner';
 import AlertModal from './components/AlertModal';
 import MapSelectorModal from './components/MapSelectorModal';
@@ -19,7 +20,9 @@ function App() {
   const [authError, setAuthError] = useState('');
   const [currentView, setCurrentView] = useState('menu'); // 'menu' | 'draft' | 'stats' | 'profile' | 'brawler-profile'
   const [selectedProfileBrawlerId, setSelectedProfileBrawlerId] = useState(null);
+  const [selectedMapId, setSelectedMapId] = useState(null);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [showHomeMapBrowser, setShowHomeMapBrowser] = useState(false);
 
   // Connection State
   const [backendConnected, setBackendConnected] = useState(true);
@@ -1099,6 +1102,21 @@ function App() {
                           <span style={{ textTransform: 'capitalize' }}>{getModeIcon(m.mode)} {m.mode}</span>
                           <span>•</span>
                           <span>{getBrawlerName(brawlers, m.my_brawler_id)}</span>
+                          {m.my_brawler_trophies != null && (
+                            <>
+                              <span>•</span>
+                              {m.draft_type === 'ranked' ? (
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  {getRankIconUrl(m.my_brawler_trophies) && (
+                                    <img src={getRankIconUrl(m.my_brawler_trophies)} alt="" style={{ width: 12, height: 12 }} />
+                                  )}
+                                  {getRankById(m.my_brawler_trophies)?.name || m.my_brawler_trophies}
+                                </span>
+                              ) : (
+                                <span>{m.my_brawler_trophies}🏆</span>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1734,6 +1752,10 @@ function App() {
             setSelectedProfileBrawlerId(brawlerId);
             setCurrentView('brawler-profile');
           }}
+          onMapClick={(mapId) => {
+            setSelectedMapId(mapId);
+            setCurrentView('map-profile');
+          }}
         />
       ) : currentView === 'brawler-profile' ? (
         <BrawlerProfile
@@ -1744,8 +1766,34 @@ function App() {
           allMaps={allMaps}
           onBack={() => setCurrentView('stats')}
         />
+      ) : currentView === 'map-profile' ? (
+        <MapProfile
+          mapId={selectedMapId}
+          matches={matches}
+          brawlers={brawlers}
+          allMaps={allMaps}
+          onBack={() => setCurrentView('stats')}
+          onBrawlerClick={(brawlerId) => {
+            setSelectedProfileBrawlerId(brawlerId);
+            setCurrentView('brawler-profile');
+          }}
+        />
       ) : (
         <div className="welcome-menu-container">
+          {/* ── Map Browser ── */}
+          <div className="home-map-browser glass-panel" onClick={() => setShowHomeMapBrowser(true)}>
+            <div className="home-map-browser-header">
+              <span className="home-map-browser-icon">🗺️</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Map Browser</h3>
+                <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+                  Browse all maps, view stats and performance
+                </p>
+              </div>
+              <span className="home-map-browser-btn">Browse Maps →</span>
+            </div>
+          </div>
+
           <div className="welcome-card glass-panel">
             <h2>Welcome, {me?.name || currentUser.name}!</h2>
             <p className="welcome-subtitle">Brawl Stats Game Hub</p>
@@ -1786,7 +1834,7 @@ function App() {
                   <p>View game statistics, win rates, brawler performance, and more.</p>
                 </div>
               </button>
-            </div>
+          </div>
           </div>
 
           <div className="battle-log-card glass-panel">
@@ -1889,6 +1937,21 @@ function App() {
                         <span style={{ textTransform: 'capitalize', color: m.draft_type === 'ranked' ? 'var(--color-ally)' : 'var(--color-text-muted)' }}>
                           {m.draft_type}
                         </span>
+                        {m.my_brawler_trophies != null && (
+                          <>
+                            <span>•</span>
+                            {m.draft_type === 'ranked' ? (
+                              <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                {getRankIconUrl(m.my_brawler_trophies) && (
+                                  <img src={getRankIconUrl(m.my_brawler_trophies)} alt="" style={{ width: 12, height: 12 }} />
+                                )}
+                                {getRankById(m.my_brawler_trophies)?.name || m.my_brawler_trophies}
+                              </span>
+                            ) : (
+                              <span>{m.my_brawler_trophies}🏆</span>
+                            )}
+                          </>
+                        )}
                       </div>
                     </div>
                     
@@ -2005,7 +2068,16 @@ function App() {
                       <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: set.result === 'victory' ? '#4caf50' : '#f44336' }}>
                         {set.result.toUpperCase()}
                       </span>
-                      <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{set.my_brawler_trophies} Trophies</span>
+                      {draftType === 'ranked' ? (
+                        <span style={{ fontSize: '0.85rem', color: '#ccc', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {getRankIconUrl(set.my_brawler_trophies) && (
+                            <img src={getRankIconUrl(set.my_brawler_trophies)} alt="" style={{ width: 16, height: 16 }} />
+                          )}
+                          {getRankById(set.my_brawler_trophies)?.name || set.my_brawler_trophies}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{set.my_brawler_trophies} Trophies</span>
+                      )}
                       {set.is_star_player && (
                         <span style={{ fontSize: '0.75rem', background: '#ffb703', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
                           Star Player
@@ -2072,6 +2144,18 @@ function App() {
           setShowMapModal(false);
         }}
         onClose={() => setShowMapModal(false)}
+      />
+
+      <MapSelectorModal
+        isOpen={showHomeMapBrowser}
+        maps={allMaps.filter(m => ['Gem Grab', 'Brawl Ball', 'Heist', 'Hot Zone', 'Knockout', 'Bounty'].includes(m.mode))}
+        selectedMap={null}
+        onSelectMap={(m) => {
+          setShowHomeMapBrowser(false);
+          setSelectedMapId(m.id);
+          setCurrentView('map-profile');
+        }}
+        onClose={() => setShowHomeMapBrowser(false)}
       />
 
       <AlertModal

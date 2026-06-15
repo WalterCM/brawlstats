@@ -39,3 +39,37 @@ export const getModeIcon = (mode) => {
   };
   return icons[normalized] || '⚔️';
 };
+
+export const RANKS = [
+  { id: 1,  name: 'Bronze I' },
+  { id: 2,  name: 'Bronze II' },
+  { id: 3,  name: 'Bronze III' },
+  { id: 4,  name: 'Silver I' },
+  { id: 5,  name: 'Silver II' },
+  { id: 6,  name: 'Silver III' },
+  { id: 7,  name: 'Gold I' },
+  { id: 8,  name: 'Gold II' },
+  { id: 9,  name: 'Gold III' },
+  { id: 10, name: 'Diamond I' },
+  { id: 11, name: 'Diamond II' },
+  { id: 12, name: 'Diamond III' },
+  { id: 13, name: 'Mythic I' },
+  { id: 14, name: 'Mythic II' },
+  { id: 15, name: 'Mythic III' },
+  { id: 16, name: 'Legendary I' },
+  { id: 17, name: 'Legendary II' },
+  { id: 18, name: 'Legendary III' },
+  { id: 19, name: 'Masters' },
+];
+
+export const getRankById = (id) => {
+  const numId = Number(id);
+  return RANKS.find(r => r.id === numId) || null;
+};
+
+export const getRankIconUrl = (rankId) => {
+  const numId = Number(rankId);
+  if (numId < 1 || numId > 19) return '';
+  const assetId = 58000000 + (numId - 1);
+  return `https://cdn.brawlify.com/ranked/tiered/${assetId}.png`;
+};

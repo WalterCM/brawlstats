@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
+import { getRankById, getRankIconUrl } from './utils/helpers';
 
-export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], onClose, onBrawlerClick }) {
+export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], onClose, onBrawlerClick, onMapClick }) {
   // Filter States
   const [selectedMode, setSelectedMode] = useState('All');
   const [selectedDraftType, setSelectedDraftType] = useState('All');
@@ -27,6 +28,10 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
   const getMapName = useCallback((id) => {
     const found = allMaps.find(m => String(m.id) === String(id));
     return found ? found.name : 'Unknown';
+  }, [allMaps]);
+
+  const getMapData = useCallback((id) => {
+    return allMaps.find(m => String(m.id) === String(id)) || null;
   }, [allMaps]);
 
   const getModeIcon = (mode) => {
@@ -90,7 +95,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
   const kpis = useMemo(() => {
     const total = filteredMatches.length;
     if (total === 0) {
-      return { winRate: 0, total: 0, mvpRate: 0, avgTrophies: 0, streak: 'None' };
+      return { winRate: 0, total: 0, mvpRate: 0, avgTrophies: 0, streak: 'None', playerRankId: null };
     }
 
     const wins = filteredMatches.filter(m => m.result === 'victory').length;
@@ -100,6 +105,16 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
     const trophyMatches = filteredMatches.filter(
       m => m.my_brawler_trophies !== null && m.my_brawler_trophies > 50 && m.draft_type === 'normal'
     );
+
+    // Player rank — most common rank level from ranked matches
+    const rankedRanks = filteredMatches
+      .filter(m => m.my_brawler_trophies && m.draft_type === 'ranked')
+      .map(m => m.my_brawler_trophies);
+    const rankFreq = {};
+    rankedRanks.forEach(id => { rankFreq[id] = (rankFreq[id] || 0) + 1; });
+    const playerRankId = rankedRanks.length > 0
+      ? Object.entries(rankFreq).sort((a, b) => b[1] - a[1])[0][0]
+      : null;
     const avgTrophies = trophyMatches.length > 0
       ? Math.round(trophyMatches.reduce((acc, m) => acc + m.my_brawler_trophies, 0) / trophyMatches.length)
       : 0;
@@ -132,7 +147,8 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       total,
       mvpRate: Math.round((mvps / total) * 100),
       avgTrophies,
-      streak: streakDisplay
+      streak: streakDisplay,
+      playerRankId,
     };
   }, [filteredMatches]);
 
@@ -148,7 +164,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       groups[bid].games++;
       if (m.result === 'victory') groups[bid].wins++;
       if (m.is_star_player) groups[bid].mvps++;
-      if (m.my_brawler_trophies) {
+      if (m.my_brawler_trophies && m.draft_type === 'normal' && m.my_brawler_trophies > 50) {
         groups[bid].trophiesSum += m.my_brawler_trophies;
         groups[bid].trophiesCount++;
       }
@@ -169,7 +185,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
         bClass,
         winRate,
         avgTrophies,
-        mvpRate
+        mvpRate,
       };
     });
 
@@ -220,14 +236,18 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
     });
 
     return Object.values(groups)
-      .map(g => ({
-        ...g,
-        name: getMapName(g.mapId),
-        winRate: Math.round((g.wins / g.games) * 100)
-      }))
+      .map(g => {
+        const md = getMapData(g.mapId);
+        return {
+          ...g,
+          name: md?.name || getMapName(g.mapId),
+          image_url: md?.image_url || null,
+          winRate: Math.round((g.wins / g.games) * 100)
+        };
+      })
       .sort((a, b) => b.games - a.games || b.winRate - a.winRate)
       .slice(0, 8); // Top 8 maps
-  }, [filteredMatches, getMapName]);
+  }, [filteredMatches, getMapName, getMapData]);
 
   // 6. Result Strip — oldest to latest (left to right)
   const resultStrip = useMemo(() => {
@@ -387,6 +407,23 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
             <span className="kpi-subtext">Normal matches only</span>
           </div>
         </div>
+
+        {kpis.playerRankId && (
+          <div className="kpi-card glass-panel glow-gold">
+            <div className="kpi-icon-wrapper" style={{ background: 'rgba(255, 215, 0, 0.15)', border: '2px solid #ffd700' }}>
+              {getRankIconUrl(kpis.playerRankId) && (
+                <img src={getRankIconUrl(kpis.playerRankId)} alt="" style={{ width: 28, height: 28 }} />
+              )}
+            </div>
+            <div className="kpi-details">
+              <span className="kpi-value" style={{ fontSize: '1.1rem' }}>
+                {getRankById(kpis.playerRankId)?.name || kpis.playerRankId}
+              </span>
+              <span className="kpi-label">Current Rank</span>
+              <span className="kpi-subtext">Most played rank level</span>
+            </div>
+          </div>
+        )}
 
         {kpis.streak && (
           <div className="kpi-card glass-panel glow-enemy">
@@ -553,7 +590,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                           </div>
                         </div>
                       </td>
-                      <td>{b.avgTrophies ? `${b.avgTrophies} 🏆` : 'N/A'}</td>
+                      <td>{b.avgTrophies > 0 ? `${b.avgTrophies} 🏆` : 'N/A'}</td>
                       <td>
                         {b.mvps > 0 ? (
                           <span className="mvp-badge">👑 {b.mvps}</span>
@@ -608,7 +645,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                 <div className="empty-msg">No map statistics.</div>
               ) : (
                 mapStats.map(m => (
-                  <div key={m.mapId} className="map-stat-row">
+                  <div key={m.mapId} className="map-stat-row" style={{ cursor: onMapClick ? 'pointer' : 'default' }} onClick={() => onMapClick && onMapClick(m.mapId)}>
                     <div className="map-detail">
                       <span className="map-name-lbl">{m.name}</span>
                       <span className="map-mode-lbl">{getModeIcon(m.mode)} {m.mode}</span>
