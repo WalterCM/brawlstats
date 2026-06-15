@@ -3,16 +3,10 @@ import { api, setGlobalActiveUser } from './services/api';
 import './App.css';
 import StatsDashboard from './StatsDashboard';
 import BrawlerProfile from './BrawlerProfile';
-
-const deduplicateMaps = (mapList) => {
-  const seen = new Set();
-  return mapList.filter(m => {
-    const key = `${m.name.trim().toLowerCase()}-${m.mode.trim().toLowerCase()}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-};
+import { deduplicateMaps, getMapName, getBrawlerName, getBrawlerAvatar, getModeIcon } from './utils/helpers';
+import MatchTeamsBanner from './components/MatchTeamsBanner';
+import AlertModal from './components/AlertModal';
+import MapSelectorModal from './components/MapSelectorModal';
 
 function App() {
   // Authentication & Users
@@ -36,7 +30,6 @@ function App() {
   const [allMaps, setAllMaps] = useState([]);
   const [selectedMap, setSelectedMap] = useState(null);
   const [showMapModal, setShowMapModal] = useState(false);
-  const [mapFilterMode, setMapFilterMode] = useState('All');
   const [modalAlert, setModalAlert] = useState({
     isOpen: false,
     title: '',
@@ -69,7 +62,6 @@ function App() {
 
   // Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [mapSearchQuery, setMapSearchQuery] = useState('');
   const [selectedClass, setSelectedClass] = useState('All');
 
   // Personal Logs
@@ -800,108 +792,6 @@ function App() {
     }
   };
 
-  const getMapName = (id) => {
-    const found = allMaps.find(m => String(m.id) === String(id));
-    return found ? found.name : id;
-  };
-
-  const getBrawlerName = (id) => {
-    const found = brawlers.find(b => String(b.id) === String(id));
-    return found ? found.name : id;
-  };
-
-  const getBrawlerAvatar = (id) => {
-    const found = brawlers.find(b => String(b.id) === String(id));
-    return found ? found.image_url : '';
-  };
-
-  const getModeIcon = (mode) => {
-    if (!mode) return '⚔️';
-    const normalized = mode.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const icons = {
-      bounty: '⭐',
-      brawlball: '⚽',
-      gemgrab: '💎',
-      heist: '💰',
-      hotzone: '🔥',
-      knockout: '💀',
-      showdown: '🌵',
-      soloshowdown: '🌵',
-      duoshowdown: '👥'
-    };
-    return icons[normalized] || '⚔️';
-  };
-
-  const renderMatchTeams = (m) => {
-    const picks = m.draft_events || [];
-    const alliedPicks = picks
-      .filter(e => e.type === 'pick' && e.team === 'allied')
-      .sort((a, b) => a.order - b.order)
-      .map(e => e.brawler_id);
-    const enemyPicks = picks
-      .filter(e => e.type === 'pick' && e.team === 'enemy')
-      .sort((a, b) => a.order - b.order)
-      .map(e => e.brawler_id);
-
-    if (alliedPicks.length === 0 && m.my_brawler_id) {
-      alliedPicks.push(m.my_brawler_id);
-    }
-
-    let myBrawlerHighlighted = false;
-
-    const renderBrawlerAvatarItem = (brawlerId, isAllied, idx) => {
-      const avatarUrl = getBrawlerAvatar(brawlerId);
-      const bName = getBrawlerName(brawlerId);
-      
-      let isMyBrawler = false;
-      if (isAllied && String(brawlerId) === String(m.my_brawler_id) && !myBrawlerHighlighted) {
-        isMyBrawler = true;
-        myBrawlerHighlighted = true;
-      }
-      
-      return (
-        <div 
-          key={`${brawlerId}-${idx}`}
-          style={{ 
-            position: 'relative', 
-            width: '24px', 
-            height: '24px', 
-            borderRadius: '50%',
-            border: isMyBrawler ? '2px solid #ffd166' : (isAllied ? '1.5px solid var(--color-ally)' : '1.5px solid var(--color-enemy)'),
-            overflow: 'hidden',
-            flexShrink: 0,
-            boxShadow: isMyBrawler ? '0 0 6px #ffd166' : 'none'
-          }}
-          title={`${bName}${isMyBrawler ? ' (You)' : ''}`}
-        >
-          {avatarUrl ? (
-            <img 
-              src={avatarUrl} 
-              alt={bName} 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-            />
-          ) : (
-            <div style={{ width: '100%', height: '100%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px' }}>
-              👤
-            </div>
-          )}
-        </div>
-      );
-    };
-
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-          {alliedPicks.map((bId, idx) => renderBrawlerAvatarItem(bId, true, idx))}
-        </div>
-        <span style={{ fontSize: '9px', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>VS</span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-          {enemyPicks.map((bId, idx) => renderBrawlerAvatarItem(bId, false, idx))}
-        </div>
-      </div>
-    );
-  };
-
   const displayedMatches = matches.filter(m => {
     const matchesMap = !selectedMap || String(m.map_id) === String(selectedMap.id);
     const matchesDraftType = m.draft_type === draftType;
@@ -909,8 +799,8 @@ function App() {
   });
 
   const displayedPerceptions = perceptions.filter(p => {
-    const myBrawlerName = getBrawlerName(p.my_brawler_id).toLowerCase();
-    const rivalBrawlerName = getBrawlerName(p.brawler_rival_id).toLowerCase();
+    const myBrawlerName = getBrawlerName(brawlers, p.my_brawler_id).toLowerCase();
+    const rivalBrawlerName = getBrawlerName(brawlers, p.brawler_rival_id).toLowerCase();
     const matchesSearch = !searchQuery || 
       myBrawlerName.includes(searchQuery.toLowerCase()) || 
       rivalBrawlerName.includes(searchQuery.toLowerCase());
@@ -1198,17 +1088,17 @@ function App() {
                 <div className="match-list">
                   {displayedMatches.slice(0, 5).map((m) => (
                     <div key={m.id} className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', fontSize: '11px', marginBottom: '6px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-glass)' }}>
-                      {renderMatchTeams(m)}
+                      {<MatchTeamsBanner match={m} brawlers={brawlers} />}
                       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span className="map-name" style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text)' }}>
-                            {getMapName(m.map_id)}
+                            {getMapName(allMaps, m.map_id)}
                           </span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-text-muted)' }}>
                           <span style={{ textTransform: 'capitalize' }}>{getModeIcon(m.mode)} {m.mode}</span>
                           <span>•</span>
-                          <span>{getBrawlerName(m.my_brawler_id)}</span>
+                          <span>{getBrawlerName(brawlers, m.my_brawler_id)}</span>
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -1281,9 +1171,9 @@ function App() {
                 <div className="perception-list">
                   {displayedPerceptions.slice(0, 5).map((p) => (
                     <div key={p.id} className="perception-item">
-                      <span className="my-b">{getBrawlerName(p.my_brawler_id)}</span>
+                      <span className="my-b">{getBrawlerName(brawlers, p.my_brawler_id)}</span>
                       <span className="vs-lbl">vs</span>
-                      <span className="rival-b">{getBrawlerName(p.brawler_rival_id)}</span>
+                      <span className="rival-b">{getBrawlerName(brawlers, p.brawler_rival_id)}</span>
                       <span className={`rating-badge val-${p.value}`}>
                         {p.value === 1 && 'Easy'}
                         {p.value === 0 && 'Neutral'}
@@ -1337,10 +1227,7 @@ function App() {
             <button 
               type="button" 
               className="map-selector-btn"
-              onClick={() => {
-                setMapSearchQuery('');
-                setShowMapModal(true);
-              }}
+              onClick={() => setShowMapModal(true)}
             >
               {selectedMap?.image_url && (
                 <img 
@@ -1968,7 +1855,7 @@ function App() {
               {matches
                 .filter(m => {
                   if (!searchQuery) return true;
-                  const bName = getBrawlerName(m.my_brawler_id).toLowerCase();
+                  const bName = getBrawlerName(brawlers, m.my_brawler_id).toLowerCase();
                   return bName.includes(searchQuery.toLowerCase());
                 })
                 .map((m) => (
@@ -1987,17 +1874,17 @@ function App() {
                       border: '1px solid var(--border-glass)' 
                     }}
                   >
-                    {renderMatchTeams(m)}
+                    {<MatchTeamsBanner match={m} brawlers={brawlers} />}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span className="map-name" style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text)' }}>
-                          {getMapName(m.map_id)}
+                          {getMapName(allMaps, m.map_id)}
                         </span>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-text-muted)' }}>
                         <span style={{ textTransform: 'capitalize' }}>{getModeIcon(m.mode)} {m.mode}</span>
                         <span>•</span>
-                        <span>{getBrawlerName(m.my_brawler_id)}</span>
+                        <span>{getBrawlerName(brawlers, m.my_brawler_id)}</span>
                         <span>•</span>
                         <span style={{ textTransform: 'capitalize', color: m.draft_type === 'ranked' ? 'var(--color-ally)' : 'var(--color-text-muted)' }}>
                           {m.draft_type}
@@ -2176,162 +2063,24 @@ function App() {
         </div>
       )}
 
-      {/* Map Selector Modal */}
-      {showMapModal && (
-        <div className="map-selector-modal-backdrop" onClick={() => setShowMapModal(false)}>
-          <div className="map-selector-modal glass-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="map-modal-header">
-              <h2>Select Map</h2>
-              <button className="close-btn" onClick={() => setShowMapModal(false)}>&times;</button>
-            </div>
-            
-            <div className="map-modal-tabs">
-              {['All', 'Brawl Ball', 'Gem Grab', 'Heist', 'Hot Zone', 'Knockout', 'Bounty'].map(mode => (
-                <button
-                  key={mode}
-                  type="button"
-                  className={`map-tab-btn ${mapFilterMode === mode ? 'active' : ''}`}
-                  onClick={() => setMapFilterMode(mode)}
-                >
-                  {mode}
-                </button>
-              ))}
-            </div>
+      <MapSelectorModal
+        isOpen={showMapModal}
+        maps={maps}
+        selectedMap={selectedMap}
+        onSelectMap={(m) => {
+          setSelectedMap(m);
+          setShowMapModal(false);
+        }}
+        onClose={() => setShowMapModal(false)}
+      />
 
-            <div className="map-search-bar" style={{ padding: '12px 24px', borderBottom: '1px solid var(--border-glass)', flexShrink: 0 }}>
-              <input
-                type="text"
-                placeholder="Search map by name..."
-                value={mapSearchQuery}
-                onChange={(e) => setMapSearchQuery(e.target.value)}
-                className="search-input"
-                style={{
-                  width: '100%',
-                  padding: '10px 16px',
-                  fontSize: '0.9rem',
-                  borderRadius: '8px',
-                  border: '1px solid var(--border-glass)',
-                  background: 'rgba(0,0,0,0.2)',
-                  color: '#fff',
-                  outline: 'none',
-                  transition: 'all 0.2s ease'
-                }}
-              />
-            </div>
-
-            <div className="map-modal-content">
-              <div className="map-grid">
-                {maps
-                  .filter(m => mapFilterMode === 'All' || m.mode === mapFilterMode)
-                  .filter(m => m.name.toLowerCase().includes(mapSearchQuery.toLowerCase()))
-                  .map(m => (
-                    <div 
-                      key={m.id} 
-                      className={`map-card ${selectedMap?.id === m.id ? 'active' : ''}`}
-                      onClick={() => {
-                        setSelectedMap(m);
-                        setShowMapModal(false);
-                      }}
-                    >
-                      <div className="map-card-img-wrapper">
-                        {m.image_url ? (
-                          <img src={m.image_url} alt={m.name} />
-                        ) : (
-                          <div className="map-placeholder">No Image</div>
-                        )}
-                      </div>
-                      <div className="map-card-info">
-                        <span className="map-card-name">{m.name}</span>
-                        <span className="map-card-mode">{m.mode}</span>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Premium Custom Alert Modal */}
-      {modalAlert.isOpen && (
-        <div 
-          className="modal-backdrop" 
-          style={{ 
-            animation: 'fadeIn 0.25s ease-out',
-            zIndex: 1000 
-          }}
-          onClick={handleCloseAlert}
-        >
-          <div 
-            className="modal-content glass-panel" 
-            style={{ 
-              maxWidth: '400px', 
-              textAlign: 'center', 
-              padding: '30px 24px',
-              animation: 'slideUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
-              background: 'rgba(20, 20, 30, 0.95)',
-              border: '1px solid var(--border-glass)',
-              borderRadius: '16px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.6)'
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-              <div 
-                style={{ 
-                  width: '60px', 
-                  height: '60px', 
-                  borderRadius: '50%', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center',
-                  fontSize: '24px',
-                  background: modalAlert.type === 'success' 
-                    ? 'rgba(46, 213, 115, 0.15)' 
-                    : modalAlert.type === 'error'
-                    ? 'rgba(255, 71, 87, 0.15)'
-                    : 'rgba(30, 144, 255, 0.15)',
-                  border: `2px solid ${
-                    modalAlert.type === 'success' 
-                      ? '#2ed573' 
-                      : modalAlert.type === 'error'
-                      ? '#ff4757'
-                      : '#1e90ff'
-                  }`,
-                  color: modalAlert.type === 'success' 
-                    ? '#2ed573' 
-                    : modalAlert.type === 'error'
-                    ? '#ff4757'
-                    : '#1e90ff'
-                }}
-              >
-                {modalAlert.type === 'success' ? '✓' : modalAlert.type === 'error' ? '✕' : 'ℹ'}
-              </div>
-              <h2 style={{ margin: 0, fontSize: '20px', color: '#fff', borderBottom: 'none', paddingBottom: 0 }}>
-                {modalAlert.title}
-              </h2>
-              <p style={{ margin: 0, fontSize: '14px', color: 'rgba(255,255,255,0.7)', lineHeight: '1.5' }}>
-                {modalAlert.message}
-              </p>
-              <button 
-                className="btn btn-primary" 
-                style={{ 
-                  marginTop: '10px',
-                  padding: '10px 30px', 
-                  borderRadius: '24px',
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  letterSpacing: '0.5px',
-                  width: 'auto'
-                }}
-                onClick={handleCloseAlert}
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AlertModal
+        isOpen={modalAlert.isOpen}
+        type={modalAlert.type}
+        title={modalAlert.title}
+        message={modalAlert.message}
+        onClose={handleCloseAlert}
+      />
     </div>
   );
 }

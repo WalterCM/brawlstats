@@ -1,4 +1,5 @@
 import math
+import re
 from rest_framework import viewsets, views, response, status
 from apps.core.models import Brawler, Map
 from apps.core.serializers import BrawlerSerializer
@@ -308,7 +309,9 @@ def group_ranked_sets(items, target_item, db_map, normalized_player_tag):
 
         event = item.get('event', {})
         map_name = event.get('map')
-        if not map_name or map_name.strip().lower() != db_map.name.strip().lower():
+        clean_api = re.sub(r'[\'`\u2018\u2019\u201a\u201b\u2032]', '', (map_name or '')).strip().lower()
+        clean_db = re.sub(r'[\'`\u2018\u2019\u201a\u201b\u2032]', '', db_map.name).strip().lower()
+        if not map_name or clean_api != clean_db:
             continue
 
         allied_team, enemy_team, _ = resolve_battle_teams(battle, normalized_player_tag)
@@ -402,9 +405,13 @@ class LastBattleIngestView(views.APIView):
                     event = item.get('event', {})
                     map_name = event.get('map')
                     if map_name:
-                        candidate_map = Map.objects.filter(name__iexact=map_name).first()
+                        clean_name = re.sub(r'[\'`\u2018\u2019\u201a\u201b\u2032]', '', map_name)
+                        if clean_name != map_name:
+                            candidate_map = Map.objects.filter(name__iexact=clean_name).first()
+                        else:
+                            candidate_map = Map.objects.filter(name__iexact=map_name).first()
                         if not candidate_map:
-                            candidate_map = Map.objects.filter(name__icontains=map_name).first()
+                            candidate_map = Map.objects.filter(name__icontains=clean_name if clean_name != map_name else map_name).first()
                         if candidate_map:
                             normalized_mode = candidate_map.mode.lower().replace(' ', '').replace('_', '').replace('-', '')
                             if normalized_mode in allowed_modes:
@@ -590,7 +597,9 @@ class LinkDraftBattleView(views.APIView):
 
                 event = item.get('event', {})
                 map_name = event.get('map')
-                if not map_name or map_name.strip().lower() != db_map.name.strip().lower():
+                clean_api = re.sub(r'[\'`\u2018\u2019\u201a\u201b\u2032]', '', (map_name or '')).strip().lower()
+                clean_db = re.sub(r'[\'`\u2018\u2019\u201a\u201b\u2032]', '', db_map.name).strip().lower()
+                if not map_name or clean_api != clean_db:
                     continue
 
                 allied_team, enemy_team, my_brawler_api = resolve_battle_teams(battle, normalized_player_tag)

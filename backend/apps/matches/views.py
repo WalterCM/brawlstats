@@ -1,3 +1,4 @@
+import re
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -391,9 +392,13 @@ class MatchViewSet(viewsets.ModelViewSet):
                     continue
 
                 # Resolve Map from DB catalog
-                db_map = Map.objects.filter(name__iexact=map_name).first()
+                clean_name = re.sub(r'[\'`\u2018\u2019\u201a\u201b\u2032]', '', map_name)
+                if clean_name != map_name:
+                    db_map = Map.objects.filter(name__iexact=clean_name).first()
+                else:
+                    db_map = Map.objects.filter(name__iexact=map_name).first()
                 if not db_map:
-                    db_map = Map.objects.filter(name__icontains=map_name).first()
+                    db_map = Map.objects.filter(name__icontains=clean_name if clean_name != map_name else map_name).first()
                 if not db_map:
                     continue
 
