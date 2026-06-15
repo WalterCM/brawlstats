@@ -54,14 +54,18 @@ const getModeConfig = (mode) => {
   return key ? MODE_CONFIG[key] : { icon: '⚔️', color: '#9ca3af', glow: 'rgba(156,163,175,0.3)', gradient: 'linear-gradient(135deg, #4b5563, #374151)' };
 };
 
+const PAGE_SIZE = 20;
+
 const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) => {
   const [filterMode, setFilterMode] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(0);
   const searchRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       setSearchQuery('');
+      setPage(0);
       setTimeout(() => searchRef.current?.focus(), 100);
     }
   }, [isOpen]);
@@ -75,11 +79,19 @@ const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) =
     return () => window.removeEventListener('keydown', handleKey);
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    setPage(0);
+  }, [filterMode, searchQuery]);
+
   if (!isOpen) return null;
 
   const filteredMaps = maps
     .filter(m => filterMode === 'All' || m.mode === filterMode)
     .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const pageCount = Math.max(1, Math.ceil(filteredMaps.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const paginatedMaps = filteredMaps.slice(safePage * PAGE_SIZE, (safePage + 1) * PAGE_SIZE);
 
   return (
     <div className="msm-backdrop" onClick={onClose}>
@@ -151,7 +163,7 @@ const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) =
             </div>
           ) : (
             <div className="msm-grid">
-              {filteredMaps.map(m => {
+              {paginatedMaps.map(m => {
                 const cfg = getModeConfig(m.mode);
                 const isSelected = selectedMap?.id === m.id;
                 return (
@@ -205,6 +217,28 @@ const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) =
             </div>
           )}
         </div>
+
+        {/* ── Pagination ── */}
+        {pageCount > 1 && (
+          <div className="msm-pagination">
+            <button type="button" className="msm-page-btn" disabled={safePage === 0} onClick={() => setPage(p => p - 1)}>
+              ‹
+            </button>
+            {Array.from({ length: pageCount }, (_, i) => (
+              <button
+                key={i}
+                type="button"
+                className={`msm-page-btn ${i === safePage ? 'msm-page-btn--active' : ''}`}
+                onClick={() => setPage(i)}
+              >
+                {i + 1}
+              </button>
+            ))}
+            <button type="button" className="msm-page-btn" disabled={safePage >= pageCount - 1} onClick={() => setPage(p => p + 1)}>
+              ›
+            </button>
+          </div>
+        )}
 
       </div>
     </div>

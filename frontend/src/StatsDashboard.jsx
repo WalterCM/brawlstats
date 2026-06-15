@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { getRankById, getRankIconUrl } from './utils/helpers';
 
 export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], onClose, onBrawlerClick, onMapClick }) {
@@ -8,6 +8,9 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
   const [selectedClass, setSelectedClass] = useState('All');
   const [timeframe, setTimeframe] = useState('All'); // 'All', '10', '25'
   const [brawlerSort, setBrawlerSort] = useState('games'); // 'games', 'winrate', 'trophies'
+  const [brawlerPage, setBrawlerPage] = useState(0);
+
+  useEffect(() => { setBrawlerPage(0); }, [brawlerSort, selectedMode, selectedDraftType, selectedClass, timeframe]);
 
   // Helpers
   const getBrawlerName = useCallback((id) => {
@@ -200,6 +203,11 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       return b.games - a.games || b.winRate - a.winRate; // Default 'games'
     });
   }, [filteredMatches, brawlerSort, getBrawlerName, getBrawlerAvatar, getBrawlerClass]);
+
+  const BRAW_PAGE_SIZE = 10;
+  const brawlerPageCount = Math.max(1, Math.ceil(brawlerStats.length / BRAW_PAGE_SIZE));
+  const safeBrawlerPage = Math.min(brawlerPage, brawlerPageCount - 1);
+  const paginatedBrawlers = brawlerStats.slice(safeBrawlerPage * BRAW_PAGE_SIZE, (safeBrawlerPage + 1) * BRAW_PAGE_SIZE);
 
   // 4. Stats by Game Mode
   const gameModeStats = useMemo(() => {
@@ -514,7 +522,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
 
       {/* Main Stats Layout Grid */}
       <div className="dashboard-main-grid">
-        
+
         {/* Left Side: Brawler performance table */}
         <div className="dashboard-section glass-panel brawlers-leaderboard">
           <div className="section-header">
@@ -548,6 +556,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
               <table className="stats-table">
                 <thead>
                   <tr>
+                    <th style={{ width: '32px' }}>#</th>
                     <th>Brawler</th>
                     <th>Class</th>
                     <th>Games</th>
@@ -557,7 +566,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                   </tr>
                 </thead>
                 <tbody>
-                  {brawlerStats.map(b => (
+                  {paginatedBrawlers.map((b, i) => (
                     <tr
                       key={b.id}
                       onClick={() => onBrawlerClick && onBrawlerClick(b.id)}
@@ -565,6 +574,9 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                       onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.background = 'rgba(0,229,255,0.06)'; }}
                       onMouseLeave={e => { e.currentTarget.style.background = ''; }}
                     >
+                      <td style={{ color: 'var(--color-text-muted)', fontWeight: 600, fontSize: '0.8rem', textAlign: 'center' }}>
+                        {safeBrawlerPage * BRAW_PAGE_SIZE + i + 1}
+                      </td>
                       <td>
                         <div className="brawler-td">
                           {b.avatar ? (
@@ -603,12 +615,33 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                 </tbody>
               </table>
             )}
+            {(
+              <div className="msm-pagination" style={{ marginTop: '8px' }}>
+                <button type="button" className="msm-page-btn" onClick={() => setBrawlerPage(p => p - 1)}>
+                  ‹
+                </button>
+                {Array.from({ length: brawlerPageCount }, (_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    className={`msm-page-btn ${i === safeBrawlerPage ? 'msm-page-btn--active' : ''}`}
+                    onClick={() => setBrawlerPage(i)}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+                <button type="button" className="msm-page-btn" onClick={() => setBrawlerPage(p => p + 1)}>
+                  ›
+                </button>
+              </div>
+            )}
           </div>
+
         </div>
 
         {/* Right Side: Game Mode, Map & Perception Cards */}
         <div className="dashboard-sidebar">
-          
+
           {/* Game Mode Performance */}
           <div className="dashboard-section glass-panel">
             <h3>Performance by Game Mode</h3>
