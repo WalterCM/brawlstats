@@ -78,6 +78,17 @@ function FreqBar({ name, avatar, count, maxCount, color }) {
   );
 }
 
+const MODE_ICONS_MAP = {
+  'Gem Grab': '💎', 'Brawl Ball': '⚽', 'Heist': '💰', 'Hot Zone': '🔥',
+  'Knockout': '💀', 'Bounty': '⭐', 'Showdown': '🌵', 'Solo Showdown': '🌵',
+  'Duo Showdown': '👥',
+};
+
+function getModeIcon(mode) {
+  if (!mode) return '⚔️';
+  return MODE_ICONS_MAP[mode] || '⚔️';
+}
+
 export default function BrawlerProfile({ brawlerId, matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], onBack }) {
   const getBrawler = (id) => brawlers.find(b => String(b.id) === String(id));
   const getMap = (id) => allMaps.find(m => String(m.id) === String(id));
@@ -100,6 +111,21 @@ export default function BrawlerProfile({ brawlerId, matches = [], perceptions = 
     if (recs.length === 0) return null;
     return Math.round((recs.reduce((s, r) => s + r.win_rate, 0) / recs.length) * 100);
   }, [brawlerMeta, brawlerId]);
+
+  // Win rate by game mode
+  const modeStats = useMemo(() => {
+    const groups = {};
+    myMatches.forEach(m => {
+      if (!m.mode) return;
+      if (!groups[m.mode]) groups[m.mode] = { mode: m.mode, games: 0, wins: 0 };
+      groups[m.mode].games++;
+      if (m.result === 'victory') groups[m.mode].wins++;
+    });
+    return Object.values(groups).map(g => ({
+      ...g,
+      winRate: Math.round((g.wins / g.games) * 100)
+    })).sort((a, b) => b.games - a.games);
+  }, [myMatches]);
 
   // Win rate by map
   const mapStats = useMemo(() => {
@@ -272,6 +298,27 @@ export default function BrawlerProfile({ brawlerId, matches = [], perceptions = 
 
           {/* Right column */}
           <div className="dashboard-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+            {/* Win rate by mode */}
+            {modeStats.length > 0 && (
+            <div className="dashboard-section glass-panel">
+              <h3>🎮 Win Rate by Mode</h3>
+              <div style={{ marginTop: '12px' }}>
+                {modeStats.map(m => (
+                  <div key={m.mode} className="map-stat-row">
+                    <div className="map-detail">
+                      <span className="map-name-lbl">{getModeIcon(m.mode)} {m.mode}</span>
+                      <span className="map-mode-lbl"></span>
+                    </div>
+                    <div className="map-games-metric">
+                      <span>{m.games}G</span>
+                      <span className={`map-wr-badge ${m.winRate >= 50 ? 'win-badge' : 'loss-badge'}`}>{m.winRate}% WR</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            )}
 
             {/* Map win rates */}
             <div className="dashboard-section glass-panel">
