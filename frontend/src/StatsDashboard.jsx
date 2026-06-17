@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { getRankById, getRankIconUrl } from './utils/helpers';
 
-export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], onClose, onBrawlerClick, onMapClick }) {
+export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], onClose, onBrawlerClick, onMapClick, onModeClick }) {
   // Filter States
   const [selectedMode, setSelectedMode] = useState('All');
   const [selectedDraftType, setSelectedDraftType] = useState('All');
@@ -11,6 +11,20 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
   const [brawlerPage, setBrawlerPage] = useState(0);
 
   useEffect(() => { setBrawlerPage(0); }, [brawlerSort, selectedMode, selectedDraftType, selectedClass, timeframe]);
+
+  // Global meta lookup
+  const globalWRLookup = useMemo(() => {
+    const map = {};
+    brawlerMeta.forEach(rec => {
+      const id = String(rec.brawler_id);
+      if (!map[id]) map[id] = { sum: 0, count: 0 };
+      map[id].sum += rec.win_rate;
+      map[id].count++;
+    });
+    const result = {};
+    Object.entries(map).forEach(([id, v]) => { result[id] = Math.round((v.sum / v.count) * 100); });
+    return result;
+  }, [brawlerMeta]);
 
   // Helpers
   const getBrawlerName = useCallback((id) => {
@@ -561,6 +575,8 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                     <th>Class</th>
                     <th>Games</th>
                     <th>Win Rate</th>
+                    <th>Global WR</th>
+                    <th>vs Global</th>
                     <th>Avg Trophies</th>
                     <th>MVP Count</th>
                   </tr>
@@ -601,6 +617,16 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                             ></div>
                           </div>
                         </div>
+                      </td>
+                      <td className="global-wr-td">
+                        {globalWRLookup[b.id] != null ? `${globalWRLookup[b.id]}%` : '—'}
+                      </td>
+                      <td className="vs-global-td">
+                        {globalWRLookup[b.id] != null ? (() => {
+                          const diff = b.winRate - globalWRLookup[b.id];
+                          const color = diff > 0 ? 'var(--color-ally)' : diff < 0 ? 'var(--color-enemy)' : 'var(--color-text-muted)';
+                          return <span style={{ color, fontWeight: 700, fontSize: '12px' }}>{diff > 0 ? '+' : ''}{diff}%</span>;
+                        })() : '—'}
                       </td>
                       <td>{b.avgTrophies > 0 ? `${b.avgTrophies} 🏆` : 'N/A'}</td>
                       <td>
@@ -650,7 +676,14 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                 <div className="empty-msg">No mode statistics.</div>
               ) : (
                 gameModeStats.map(g => (
-                  <div key={g.mode} className="game-mode-stat-card">
+                  <div
+                    key={g.mode}
+                    className="game-mode-stat-card"
+                    style={{ cursor: onModeClick ? 'pointer' : 'default' }}
+                    onClick={() => onModeClick && onModeClick(g.mode)}
+                    onMouseEnter={e => { if (onModeClick) e.currentTarget.style.borderColor = 'var(--color-ally)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = ''; }}
+                  >
                     <div className="mode-title-row">
                       <span className="mode-name">{getModeIcon(g.mode)} {g.mode}</span>
                       <span className="mode-games">{g.games} games</span>

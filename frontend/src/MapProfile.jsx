@@ -35,7 +35,7 @@ function ScoreBar({ value, max = 1, color }) {
   );
 }
 
-export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps = [], onBack, onBrawlerClick }) {
+export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], onBack, onBrawlerClick }) {
   const mapData = allMaps.find(m => String(m.id) === String(mapId));
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
@@ -88,6 +88,20 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
 
   const maxBrawlerGames = brawlerStats[0]?.games || 1;
   const maxScore = suggestions[0]?.score || 1;
+
+  // Global WR lookup
+  const globalWRLookup = useMemo(() => {
+    const map = {};
+    brawlerMeta.forEach(rec => {
+      const id = String(rec.brawler_id);
+      if (!map[id]) map[id] = { sum: 0, count: 0 };
+      map[id].sum += rec.win_rate;
+      map[id].count++;
+    });
+    const result = {};
+    Object.entries(map).forEach(([id, v]) => { result[id] = Math.round((v.sum / v.count) * 100); });
+    return result;
+  }, [brawlerMeta]);
 
   if (!mapData) return null;
 
@@ -316,6 +330,16 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
                               }}>
                                 {b.winRate}%
                               </span>
+                              {globalWRLookup[b.id] != null && (() => {
+                                const diff = b.winRate - globalWRLookup[b.id];
+                                const color = diff > 0 ? 'var(--color-ally)' : diff < 0 ? 'var(--color-enemy)' : 'var(--color-text-muted)';
+                                return (
+                                  <span style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>
+                                    🌐 {globalWRLookup[b.id]}%
+                                    <span style={{ color, fontWeight: 700, marginLeft: '2px' }}>({diff > 0 ? '+' : ''}{diff}%)</span>
+                                  </span>
+                                );
+                              })()}
                             </div>
                           </div>
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '5px' }}>

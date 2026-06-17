@@ -330,6 +330,15 @@ describe('Stats Dashboard & Battle Log', () => {
     await userEvent.click(screen.getByText(/sync api history/i))
     await waitFor(() => { expect(mockApi.syncMatchesAPI).toHaveBeenCalled() })
   })
+
+  it('navigates to mode profile from dashboard', async () => {
+    render(<App />)
+    await waitForWelcome()
+    await userEvent.click(screen.getByText('Stats Dashboard'))
+    expect(await screen.findByText(/personal stats dashboard/i)).toBeInTheDocument()
+    await userEvent.click(screen.getAllByText(/Gem Grab/i)[1])
+    expect(await screen.findByText(/Brawler Performance in Gem Grab/i)).toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------

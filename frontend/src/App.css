@@ -1829,10 +1829,15 @@
 }
 
 .game-mode-stat-card {
-  background: rgba(0, 0, 0, 0.2);
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-glass);
   border-radius: 8px;
-  padding: 12px 15px;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.game-mode-stat-card:hover {
+  background: rgba(0, 229, 255, 0.04);
 }
 
 .mode-title-row {

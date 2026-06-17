@@ -78,7 +78,7 @@ function FreqBar({ name, avatar, count, maxCount, color }) {
   );
 }
 
-export default function BrawlerProfile({ brawlerId, matches = [], perceptions = [], brawlers = [], allMaps = [], onBack }) {
+export default function BrawlerProfile({ brawlerId, matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], onBack }) {
   const getBrawler = (id) => brawlers.find(b => String(b.id) === String(id));
   const getMap = (id) => allMaps.find(m => String(m.id) === String(id));
 
@@ -93,6 +93,13 @@ export default function BrawlerProfile({ brawlerId, matches = [], perceptions = 
   const wins = myMatches.filter(m => m.result === 'victory').length;
   const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
   const mvps = myMatches.filter(m => m.is_star_player).length;
+
+  // Global WR for this brawler
+  const globalWR = useMemo(() => {
+    const recs = brawlerMeta.filter(r => String(r.brawler_id) === String(brawlerId));
+    if (recs.length === 0) return null;
+    return Math.round((recs.reduce((s, r) => s + r.win_rate, 0) / recs.length) * 100);
+  }, [brawlerMeta, brawlerId]);
 
   // Win rate by map
   const mapStats = useMemo(() => {
@@ -192,6 +199,22 @@ export default function BrawlerProfile({ brawlerId, matches = [], perceptions = 
             <div style={{ fontSize: '22px', fontWeight: 'bold', color: winRate >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)' }}>{winRate}%</div>
             <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>Win Rate</div>
           </div>
+          {globalWR != null && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--color-text-muted)' }}>🌐 {globalWR}%</div>
+              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>Global WR</div>
+            </div>
+          )}
+          {globalWR != null && (() => {
+            const diff = winRate - globalWR;
+            const color = diff > 0 ? 'var(--color-ally)' : diff < 0 ? 'var(--color-enemy)' : 'var(--color-text-muted)';
+            return (
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '18px', fontWeight: 'bold', color }}>{diff > 0 ? '+' : ''}{diff}%</div>
+                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>vs Global</div>
+              </div>
+            );
+          })()}
           <div style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '22px', fontWeight: 'bold' }}>{total}</div>
             <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>Games</div>

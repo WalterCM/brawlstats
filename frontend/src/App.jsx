@@ -4,6 +4,7 @@ import './App.css';
 import StatsDashboard from './StatsDashboard';
 import BrawlerProfile from './BrawlerProfile';
 import MapProfile from './MapProfile';
+import ModeProfile from './ModeProfile';
 import { deduplicateMaps, getMapName, getBrawlerName, getBrawlerAvatar, getModeIcon, getRankById, getRankIconUrl } from './utils/helpers';
 import MatchTeamsBanner from './components/MatchTeamsBanner';
 import AlertModal from './components/AlertModal';
@@ -18,9 +19,10 @@ function App() {
 
   const [me, setMe] = useState(null);
   const [authError, setAuthError] = useState('');
-  const [currentView, setCurrentView] = useState('menu'); // 'menu' | 'draft' | 'stats' | 'profile' | 'brawler-profile'
+  const [currentView, setCurrentView] = useState('menu'); // 'menu' | 'draft' | 'stats' | 'profile' | 'brawler-profile' | 'map-profile' | 'mode-profile'
   const [selectedProfileBrawlerId, setSelectedProfileBrawlerId] = useState(null);
   const [selectedMapId, setSelectedMapId] = useState(null);
+  const [selectedMode, setSelectedMode] = useState(null);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showHomeMapBrowser, setShowHomeMapBrowser] = useState(false);
 
@@ -31,6 +33,7 @@ function App() {
   const [brawlers, setBrawlers] = useState([]);
   const [maps, setMaps] = useState([]);
   const [allMaps, setAllMaps] = useState([]);
+  const [brawlerMeta, setBrawlerMeta] = useState([]);
   const [selectedMap, setSelectedMap] = useState(null);
   const [showMapModal, setShowMapModal] = useState(false);
   const [modalAlert, setModalAlert] = useState({
@@ -214,6 +217,7 @@ function App() {
       setSelectedMap(null);
       setBackendConnected(true);
       loadUserStats();
+      api.fetchBrawlerMeta().then(setBrawlerMeta).catch(() => {});
     } catch (err) {
       console.error("Error loading catalogs:", err);
       setBackendConnected(false);
@@ -1747,6 +1751,7 @@ function App() {
           perceptions={perceptions}
           brawlers={brawlers}
           allMaps={allMaps}
+          brawlerMeta={brawlerMeta}
           onClose={() => setCurrentView('menu')}
           onBrawlerClick={(brawlerId) => {
             setSelectedProfileBrawlerId(brawlerId);
@@ -1756,6 +1761,10 @@ function App() {
             setSelectedMapId(mapId);
             setCurrentView('map-profile');
           }}
+          onModeClick={(mode) => {
+            setSelectedMode(mode);
+            setCurrentView('mode-profile');
+          }}
         />
       ) : currentView === 'brawler-profile' ? (
         <BrawlerProfile
@@ -1764,6 +1773,7 @@ function App() {
           perceptions={perceptions}
           brawlers={brawlers}
           allMaps={allMaps}
+          brawlerMeta={brawlerMeta}
           onBack={() => setCurrentView('stats')}
         />
       ) : currentView === 'map-profile' ? (
@@ -1772,10 +1782,28 @@ function App() {
           matches={matches}
           brawlers={brawlers}
           allMaps={allMaps}
+          brawlerMeta={brawlerMeta}
           onBack={() => setCurrentView('stats')}
           onBrawlerClick={(brawlerId) => {
             setSelectedProfileBrawlerId(brawlerId);
             setCurrentView('brawler-profile');
+          }}
+        />
+      ) : currentView === 'mode-profile' ? (
+        <ModeProfile
+          mode={selectedMode}
+          matches={matches}
+          brawlers={brawlers}
+          allMaps={allMaps}
+          brawlerMeta={brawlerMeta}
+          onBack={() => setCurrentView('stats')}
+          onBrawlerClick={(brawlerId) => {
+            setSelectedProfileBrawlerId(brawlerId);
+            setCurrentView('brawler-profile');
+          }}
+          onMapClick={(mapId) => {
+            setSelectedMapId(mapId);
+            setCurrentView('map-profile');
           }}
         />
       ) : (
