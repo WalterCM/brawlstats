@@ -75,6 +75,26 @@ export const api = {
     return res.json();
   },
 
+  // Fetch global brawler meta stats (win rate, pick rate)
+  async fetchBrawlerMeta() {
+    const res = await fetch(`${API_BASE_URL}/brawler-meta/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch brawler meta stats');
+    return res.json();
+  },
+
+  // Fetch global map meta stats (win rate, pick rate per brawler per map)
+  async fetchMapMeta(mapId) {
+    let url = `${API_BASE_URL}/map-meta/`;
+    if (mapId) url += `?map_id=${mapId}`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch map meta stats');
+    return res.json();
+  },
+
   // Fetch active suggestions based on picks/bans
   async fetchSuggestions(mapId, alliesPicked, enemiesPicked, alliesBanned, enemiesBanned, enableTurns = true, activeTeam = 'allied', draftType = 'ranked', minTrophies = 1000) {
     const res = await fetch(`${API_BASE_URL}/draft/suggest/`, {

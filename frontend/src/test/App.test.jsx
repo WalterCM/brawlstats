@@ -91,6 +91,8 @@ const { mockApi, mockSetGlobalActiveUser } = vi.hoisted(() => {
     register: vi.fn().mockResolvedValue(mockData.loginResult),
     fetchPlayerList: vi.fn().mockResolvedValue(mockData.playerList),
     accessPlayerProfile: vi.fn().mockResolvedValue(mockData.loginResult),
+    fetchBrawlerMeta: vi.fn().mockResolvedValue([]),
+    fetchMapMeta: vi.fn().mockResolvedValue([]),
   }
 
   return { mockApi, mockSetGlobalActiveUser: vi.fn(), mockData }
