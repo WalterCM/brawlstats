@@ -223,6 +223,25 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
   const safeBrawlerPage = Math.min(brawlerPage, brawlerPageCount - 1);
   const paginatedBrawlers = brawlerStats.slice(safeBrawlerPage * BRAW_PAGE_SIZE, (safeBrawlerPage + 1) * BRAW_PAGE_SIZE);
 
+  // Sparkline data per brawler (rolling WR points)
+  const brawlerSparklines = useMemo(() => {
+    const map = {};
+    brawlerStats.forEach(b => {
+      const bMatches = filteredMatches
+        .filter(m => String(m.my_brawler_id) === String(b.id))
+        .sort((a, d) => new Date(a.date) - new Date(d.date));
+      if (bMatches.length < 3) { map[b.id] = []; return; }
+      const pts = [];
+      const windowSize = 5;
+      for (let i = windowSize - 1; i < bMatches.length; i++) {
+        const w = bMatches.slice(Math.max(0, i - windowSize + 1), i + 1);
+        pts.push(Math.round((w.filter(m => m.result === 'victory').length / w.length) * 100));
+      }
+      map[b.id] = pts;
+    });
+    return map;
+  }, [brawlerStats, filteredMatches]);
+
   // 4. Stats by Game Mode
   const gameModeStats = useMemo(() => {
     const groups = {};
@@ -575,6 +594,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                     <th>Class</th>
                     <th>Games</th>
                     <th>Win Rate</th>
+                    <th style={{ width: '80px' }}>Trend</th>
                     <th>Global WR</th>
                     <th>vs Global</th>
                     <th>Avg Trophies</th>
@@ -617,6 +637,24 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                             ></div>
                           </div>
                         </div>
+                      </td>
+                      <td style={{ padding: '2px 4px' }}>
+                        {(() => {
+                          const pts = brawlerSparklines[b.id];
+                          if (!pts || pts.length < 2) return <span style={{ color: 'var(--color-text-muted)', fontSize: '10px' }}>—</span>;
+                          const sw = 70, sh = 24, pad = 2;
+                          const cw = sw - pad * 2, ch = sh - pad * 2;
+                          const toX = (i) => pad + (i / (pts.length - 1)) * cw;
+                          const toY = (v) => pad + ch - (v / 100) * ch;
+                          const line = pts.map((v, i) => `${toX(i)},${toY(v)}`).join(' ');
+                          const lastColor = pts[pts.length - 1] >= 50 ? '#00e5ff' : '#ff4081';
+                          return (
+                            <svg width={sw} height={sh} viewBox={`0 0 ${sw} ${sh}`}>
+                              <polyline points={line} fill="none" stroke={lastColor} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+                              <circle cx={toX(pts.length - 1)} cy={toY(pts[pts.length - 1])} r="2" fill={lastColor} />
+                            </svg>
+                          );
+                        })()}
                       </td>
                       <td className="global-wr-td">
                         {globalWRLookup[b.id] != null ? `${globalWRLookup[b.id]}%` : '—'}
