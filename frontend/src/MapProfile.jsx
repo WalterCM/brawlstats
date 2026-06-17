@@ -26,15 +26,6 @@ function timeAgo(dateStr) {
   return `${d}d ago`;
 }
 
-function ScoreBar({ value, max = 1, color }) {
-  const pct = Math.min(100, Math.max(0, (value / max) * 100));
-  return (
-    <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
-      <div style={{ width: `${pct}%`, height: '100%', borderRadius: '3px', background: color, transition: 'width 0.5s ease' }} />
-    </div>
-  );
-}
-
 export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], onBack, onBrawlerClick }) {
   const mapData = allMaps.find(m => String(m.id) === String(mapId));
   const [suggestions, setSuggestions] = useState([]);
@@ -87,7 +78,6 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
   }, [mapMatches, brawlers]);
 
   const maxBrawlerGames = brawlerStats[0]?.games || 1;
-  const maxScore = suggestions[0]?.score || 1;
 
   // Global WR lookup
   const globalWRLookup = useMemo(() => {
@@ -238,9 +228,9 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {suggestions.slice(0, 10).map((s, idx) => {
                     const brawler = brawlers.find(b => String(b.id) === String(s.brawler.id));
-                    const scorePct = Math.round((s.score / maxScore) * 100);
                     const isTop3 = idx < 3;
                     const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
+                    const reality = brawlerStats.find(b => String(b.id) === String(s.brawler.id));
                     return (
                       <div
                         key={s.brawler.id}
@@ -271,13 +261,28 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
                           )}
                         </div>
 
-                        {/* Score bar */}
-                        <div className="mp-sug-score-wrap">
-                          <ScoreBar value={s.score} max={maxScore} color={modeCfg.color} />
-                          <span className="mp-sug-score-val" style={{ color: modeCfg.color }}>
-                            {(s.score * 100).toFixed(0)}
-                          </span>
-                        </div>
+                        {/* Player data on this map */}
+                        {reality && (
+                          <div className="mp-sug-reality" style={{ display: 'flex', alignItems: 'center', gap: '5px', flexShrink: 0 }}>
+                            <span style={{
+                              fontSize: '11px', fontWeight: 800, padding: '1px 7px', borderRadius: '5px',
+                              background: reality.winRate >= 50 ? 'rgba(0,229,255,0.12)' : 'rgba(255,0,85,0.12)',
+                              color: reality.winRate >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)',
+                            }}>
+                              {reality.winRate}%
+                            </span>
+                            <span style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>{reality.games}G</span>
+                            {globalWRLookup[String(s.brawler.id)] != null && (() => {
+                              const diff = reality.winRate - globalWRLookup[String(s.brawler.id)];
+                              const dColor = diff > 5 ? 'var(--color-ally)' : diff < -5 ? 'var(--color-enemy)' : 'var(--color-text-muted)';
+                              return (
+                                <span style={{ fontSize: '9px', fontWeight: 600, color: dColor }} title={`Global avg: ${globalWRLookup[String(s.brawler.id)]}%`}>
+                                  {diff > 0 ? '+' : ''}{diff}%
+                                </span>
+                              );
+                            })()}
+                          </div>
+                        )}
 
                         {/* Component breakdown on hover (tooltip) */}
                         <div className="mp-sug-tooltip">

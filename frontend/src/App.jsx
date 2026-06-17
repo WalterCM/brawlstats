@@ -96,6 +96,7 @@ function App() {
   const [linkingMatch, setLinkingMatch] = useState(false);
   const [linkingMatchId, setLinkingMatchId] = useState(null);
   const [syncingHistory, setSyncingHistory] = useState(false);
+  const [submittingMatch, setSubmittingMatch] = useState(false);
 
   const [minNormalTrophies, setMinNormalTrophies] = useState(750);
   const [suggestionTrophyThreshold, setSuggestionTrophyThreshold] = useState(1000);
@@ -709,7 +710,9 @@ function App() {
 
   const submitMatch = async () => {
     if (!selectedMap || !myBrawler) return;
+    if (submittingMatch) return;
 
+    setSubmittingMatch(true);
     try {
       const matchPayload = {
         map_id: selectedMap.id,
@@ -796,6 +799,8 @@ function App() {
         editingMatchId ? "Failed to update match logs." : "Failed to save match logs.", 
         "error"
       );
+    } finally {
+      setSubmittingMatch(false);
     }
   };
 
@@ -2157,7 +2162,7 @@ function App() {
 
             <div className="modal-actions">
               <button className="btn" onClick={() => setShowMatchLogger(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitMatch} disabled={!myBrawler}>Submit Logs</button>
+              <button className="btn btn-primary" onClick={submitMatch} disabled={!myBrawler || submittingMatch}>{submittingMatch ? 'Submitting...' : 'Submit Logs'}</button>
             </div>
           </div>
         </div>
