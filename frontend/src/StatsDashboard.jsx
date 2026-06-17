@@ -556,7 +556,9 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       {/* Main Stats Layout Grid */}
       <div className="dashboard-main-grid">
 
-        {/* Left Side: Brawler performance table */}
+        {/* Left Side */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
         <div className="dashboard-section glass-panel brawlers-leaderboard">
           <div className="section-header">
             <h3>Brawler Performance</h3>
@@ -700,6 +702,82 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
               </div>
             )}
           </div>
+
+        </div>
+
+          {/* Session Analysis */}
+          {(() => {
+            // Group matches into sessions (gap >= 2h = new session)
+            const sorted = [...filteredMatches].sort((a, b) => new Date(a.date) - new Date(b.date));
+            const sessions = [];
+            let current = [];
+            for (let i = 0; i < sorted.length; i++) {
+              if (current.length === 0) {
+                current.push(sorted[i]);
+              } else {
+                const prev = new Date(current[current.length - 1].date);
+                const cur = new Date(sorted[i].date);
+                const gapH = (cur - prev) / 3600000;
+                if (gapH >= 2) {
+                  sessions.push([...current]);
+                  current = [sorted[i]];
+                } else {
+                  current.push(sorted[i]);
+                }
+              }
+            }
+            if (current.length > 0) sessions.push([...current]);
+
+            if (sessions.length === 0) return null;
+
+            const recentSessions = sessions.slice(-8).reverse();
+            const bestSession = [...sessions]
+              .map(s => ({ games: s.length, wins: s.filter(m => m.result === 'victory').length }))
+              .reduce((best, s) => (s.games >= 3 && (s.wins / s.games) > (best.wr || 0)) ? { wr: s.wins / s.games, games: s.games } : best, { wr: 0, games: 0 });
+
+            return (
+              <div className="dashboard-section glass-panel">
+                <h3>📅 Session Analysis</h3>
+                <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 12px' }}>
+                  Matches grouped by sessions (gap &lt; 2h) — {sessions.length} total sessions
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {recentSessions.map((session, si) => {
+                    const sWins = session.filter(m => m.result === 'victory').length;
+                    const sLosses = session.length - sWins;
+                    const sWR = Math.round((sWins / session.length) * 100);
+                    const startDate = new Date(session[0].date);
+                    const endDate = new Date(session[session.length - 1].date);
+                    const durationMin = Math.round((endDate - startDate) / 60000);
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    const sessionDay = new Date(startDate); sessionDay.setHours(0,0,0,0);
+                    const dayDiff = Math.round((today - sessionDay) / 86400000);
+                    const dayLabel = dayDiff === 0 ? 'Today' : dayDiff === 1 ? 'Yesterday' : startDate.toLocaleDateString();
+                    return (
+                      <div key={si} style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700 }}>{dayLabel}</span>
+                          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{durationMin}min · {session.length} game{session.length > 1 ? 's' : ''}</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div style={{ flex: 1, height: '8px', borderRadius: '4px', overflow: 'hidden', background: 'rgba(255,0,85,0.2)' }}>
+                            <div style={{ width: `${sWR}%`, height: '100%', background: 'linear-gradient(90deg, var(--color-ally), #0077ff)', borderRadius: '4px' }} />
+                          </div>
+                          <span style={{ fontSize: '11px', fontWeight: 700, color: sWR >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)', whiteSpace: 'nowrap' }}>{sWR}%</span>
+                          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{sWins}W {sLosses}L</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {bestSession.games >= 3 && (
+                  <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.2)', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                    🏆 Best session: <strong>{Math.round(bestSession.wr * 100)}%</strong> WR over {bestSession.games} games
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
         </div>
 
