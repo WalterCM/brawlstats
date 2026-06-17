@@ -219,7 +219,7 @@ const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) =
         </div>
 
         {/* ── Pagination ── */}
-        {pageCount > 1 && (
+        {filteredMaps.length > 0 && (
           <div className="msm-pagination">
             <button type="button" className="msm-page-btn" disabled={safePage === 0} onClick={() => setPage(p => p - 1)}>
               ‹

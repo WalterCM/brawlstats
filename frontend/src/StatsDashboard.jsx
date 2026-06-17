@@ -615,9 +615,9 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                 </tbody>
               </table>
             )}
-            {(
+            {brawlerStats.length > 0 && (
               <div className="msm-pagination" style={{ marginTop: '8px' }}>
-                <button type="button" className="msm-page-btn" onClick={() => setBrawlerPage(p => p - 1)}>
+                <button type="button" className="msm-page-btn" disabled={safeBrawlerPage === 0} onClick={() => setBrawlerPage(p => Math.max(0, p - 1))}>
                   ‹
                 </button>
                 {Array.from({ length: brawlerPageCount }, (_, i) => (
@@ -630,7 +630,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                     {i + 1}
                   </button>
                 ))}
-                <button type="button" className="msm-page-btn" onClick={() => setBrawlerPage(p => p + 1)}>
+                <button type="button" className="msm-page-btn" disabled={safeBrawlerPage >= brawlerPageCount - 1} onClick={() => setBrawlerPage(p => Math.min(brawlerPageCount - 1, p + 1))}>
                   ›
                 </button>
               </div>
