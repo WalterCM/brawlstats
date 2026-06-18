@@ -191,6 +191,32 @@ export const api = {
     return res.json();
   },
 
+  // Fetch preview of available battles from BS API (not yet imported)
+  async fetchSyncPreview() {
+    const res = await fetch(`${API_BASE_URL}/matches/sync-preview/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to fetch sync preview');
+    }
+    return res.json();
+  },
+
+  // Import selected battles by battle_time
+  async importSelectedBattles(battleTimes) {
+    const res = await fetch(`${API_BASE_URL}/matches/sync-import/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ battle_times: battleTimes })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to import selected battles');
+    }
+    return res.json();
+  },
+
   // Bulk sync all new 3v3 matches from the Brawl Stars API battle log
   async syncMatchesAPI() {
     const res = await fetch(`${API_BASE_URL}/matches/sync-api/`, {

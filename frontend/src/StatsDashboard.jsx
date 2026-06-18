@@ -9,6 +9,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
   const [timeframe, setTimeframe] = useState('All'); // 'All', '10', '25'
   const [brawlerSort, setBrawlerSort] = useState('games'); // 'games', 'winrate', 'trophies'
   const [brawlerPage, setBrawlerPage] = useState(0);
+  const [sessionPage, setSessionPage] = useState(0);
 
   useEffect(() => { setBrawlerPage(0); }, [brawlerSort, selectedMode, selectedDraftType, selectedClass, timeframe]);
 
@@ -176,11 +177,15 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       const bid = m.my_brawler_id;
       if (!bid) return;
       if (!groups[bid]) {
-        groups[bid] = { id: bid, games: 0, wins: 0, mvps: 0, trophiesSum: 0, trophiesCount: 0 };
+        groups[bid] = { id: bid, games: 0, wins: 0, mvps: 0, trophiesSum: 0, trophiesCount: 0, lastDraftType: null, lastTrophies: null };
       }
       groups[bid].games++;
       if (m.result === 'victory') groups[bid].wins++;
       if (m.is_star_player) groups[bid].mvps++;
+      if (groups[bid].lastDraftType === null) {
+        groups[bid].lastDraftType = m.draft_type;
+        groups[bid].lastTrophies = m.my_brawler_trophies;
+      }
       if (m.my_brawler_trophies && m.draft_type === 'normal' && m.my_brawler_trophies > 50) {
         groups[bid].trophiesSum += m.my_brawler_trophies;
         groups[bid].trophiesCount++;
@@ -203,6 +208,8 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
         winRate,
         avgTrophies,
         mvpRate,
+        lastDraftType: g.lastDraftType,
+        lastTrophies: g.lastTrophies,
       };
     });
 
@@ -668,7 +675,9 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                           return <span style={{ color, fontWeight: 700, fontSize: '12px' }}>{diff > 0 ? '+' : ''}{diff}%</span>;
                         })() : '—'}
                       </td>
-                      <td>{b.avgTrophies > 0 ? `${b.avgTrophies} 🏆` : 'N/A'}</td>
+                      <td>{b.lastDraftType === 'ranked' && b.lastTrophies
+                        ? `🏅 ${getRankById(b.lastTrophies)?.name || b.lastTrophies}`
+                        : b.avgTrophies > 0 ? `${b.avgTrophies} 🏆` : 'N/A'}</td>
                       <td>
                         {b.mvps > 0 ? (
                           <span className="mvp-badge">👑 {b.mvps}</span>
@@ -707,7 +716,6 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
 
           {/* Session Analysis */}
           {(() => {
-            // Group matches into sessions (gap >= 2h = new session)
             const sorted = [...filteredMatches].sort((a, b) => new Date(a.date) - new Date(b.date));
             const sessions = [];
             let current = [];
@@ -730,7 +738,22 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
 
             if (sessions.length === 0) return null;
 
-            const recentSessions = sessions.slice(-8).reverse();
+            const reversedSessions = [...sessions].reverse();
+            const total = reversedSessions.length;
+            const idx = Math.min(sessionPage, total - 1);
+            const session = reversedSessions[idx];
+            const sWins = session.filter(m => m.result === 'victory').length;
+            const sLosses = session.length - sWins;
+            const sWR = Math.round((sWins / session.length) * 100);
+            const startDate = new Date(session[0].date);
+            const endDate = new Date(session[session.length - 1].date);
+            const durationMin = Math.round((endDate - startDate) / 60000);
+            const fmtTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const today = new Date(); today.setHours(0,0,0,0);
+            const sessionDay = new Date(startDate); sessionDay.setHours(0,0,0,0);
+            const dayDiff = Math.round((today - sessionDay) / 86400000);
+            const dayLabel = dayDiff === 0 ? 'Today' : dayDiff === 1 ? 'Yesterday' : startDate.toLocaleDateString();
+
             const bestSession = [...sessions]
               .map(s => ({ games: s.length, wins: s.filter(m => m.result === 'victory').length }))
               .reduce((best, s) => (s.games >= 3 && (s.wins / s.games) > (best.wr || 0)) ? { wr: s.wins / s.games, games: s.games } : best, { wr: 0, games: 0 });
@@ -739,39 +762,52 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
               <div className="dashboard-section glass-panel">
                 <h3>📅 Session Analysis</h3>
                 <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 12px' }}>
-                  Matches grouped by sessions (gap &lt; 2h) — {sessions.length} total sessions
+                  Matches grouped by sessions (gap &lt; 2h) — {total} total sessions
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {recentSessions.map((session, si) => {
-                    const sWins = session.filter(m => m.result === 'victory').length;
-                    const sLosses = session.length - sWins;
-                    const sWR = Math.round((sWins / session.length) * 100);
-                    const startDate = new Date(session[0].date);
-                    const endDate = new Date(session[session.length - 1].date);
-                    const durationMin = Math.round((endDate - startDate) / 60000);
-                    const today = new Date(); today.setHours(0,0,0,0);
-                    const sessionDay = new Date(startDate); sessionDay.setHours(0,0,0,0);
-                    const dayDiff = Math.round((today - sessionDay) / 86400000);
-                    const dayLabel = dayDiff === 0 ? 'Today' : dayDiff === 1 ? 'Yesterday' : startDate.toLocaleDateString();
-                    return (
-                      <div key={si} style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                          <span style={{ fontSize: '12px', fontWeight: 700 }}>{dayLabel}</span>
-                          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{durationMin}min · {session.length} game{session.length > 1 ? 's' : ''}</span>
-                        </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div style={{ flex: 1, height: '8px', borderRadius: '4px', overflow: 'hidden', background: 'rgba(255,0,85,0.2)' }}>
-                            <div style={{ width: `${sWR}%`, height: '100%', background: 'linear-gradient(90deg, var(--color-ally), #0077ff)', borderRadius: '4px' }} />
-                          </div>
-                          <span style={{ fontSize: '11px', fontWeight: 700, color: sWR >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)', whiteSpace: 'nowrap' }}>{sWR}%</span>
-                          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{sWins}W {sLosses}L</span>
-                        </div>
+                  <div style={{ padding: '10px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-glass)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700 }}>{dayLabel}</span>
+                      <span style={{ fontSize: '10px', color: 'var(--color-ally)', fontWeight: 600 }}>
+                        {fmtTime(startDate)} → {fmtTime(endDate)}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginBottom: '6px' }}>
+                      {durationMin}min · {session.length} game{session.length > 1 ? 's' : ''}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ flex: 1, height: '8px', borderRadius: '4px', overflow: 'hidden', background: 'rgba(255,0,85,0.2)' }}>
+                        <div style={{ width: `${sWR}%`, height: '100%', background: 'linear-gradient(90deg, var(--color-ally), #0077ff)', borderRadius: '4px' }} />
                       </div>
-                    );
-                  })}
+                      <span style={{ fontSize: '11px', fontWeight: 700, color: sWR >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)', whiteSpace: 'nowrap' }}>{sWR}%</span>
+                      <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>{sWins}W {sLosses}L</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Pagination */}
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
+                  <button
+                    className="btn btn-sm"
+                    disabled={idx === 0}
+                    onClick={() => setSessionPage(idx - 1)}
+                    style={{ padding: '2px 10px', fontSize: '11px' }}
+                  >
+                    ◀
+                  </button>
+                  <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                    Session {idx + 1} of {total}
+                  </span>
+                  <button
+                    className="btn btn-sm"
+                    disabled={idx === total - 1}
+                    onClick={() => setSessionPage(idx + 1)}
+                    style={{ padding: '2px 10px', fontSize: '11px' }}
+                  >
+                    ▶
+                  </button>
                 </div>
                 {bestSession.games >= 3 && (
-                  <div style={{ marginTop: '10px', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.2)', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                  <div style={{ marginTop: '6px', padding: '8px 12px', borderRadius: '6px', background: 'rgba(255,215,0,0.06)', border: '1px solid rgba(255,215,0,0.2)', fontSize: '11px', color: 'var(--color-text-muted)' }}>
                     🏆 Best session: <strong>{Math.round(bestSession.wr * 100)}%</strong> WR over {bestSession.games} games
                   </div>
                 )}

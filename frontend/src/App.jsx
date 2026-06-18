@@ -97,6 +97,9 @@ function App() {
   const [linkingMatchId, setLinkingMatchId] = useState(null);
   const [syncingHistory, setSyncingHistory] = useState(false);
   const [submittingMatch, setSubmittingMatch] = useState(false);
+  const [syncPreview, setSyncPreview] = useState([]);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  const [selectedBattles, setSelectedBattles] = useState(new Set());
 
   const [minNormalTrophies, setMinNormalTrophies] = useState(750);
   const [suggestionTrophyThreshold, setSuggestionTrophyThreshold] = useState(1000);
@@ -574,12 +577,33 @@ function App() {
   const handleSyncHistory = async () => {
     setSyncingHistory(true);
     try {
-      const res = await api.syncMatchesAPI();
-      triggerAlert("Synchronization Successful", res.message || `Successfully synchronized ${res.synced_count || 0} new matches!`, "success");
-      await loadUserStats();
+      const res = await api.fetchSyncPreview();
+      const reversed = [...(res.available || [])].reverse();
+      setSyncPreview(reversed);
+      setSelectedBattles(new Set(reversed.map(b => b.battle_time)));
+      setShowSyncModal(true);
     } catch (err) {
       console.error(err);
-      triggerAlert("Synchronization Failed", err.message || "Failed to synchronize matches.", "error");
+      triggerAlert("Sync Preview Failed", err.message || "Failed to fetch available battles.", "error");
+    } finally {
+      setSyncingHistory(false);
+    }
+  };
+
+  const handleSyncImport = async () => {
+    const battleTimes = Array.from(selectedBattles);
+    if (battleTimes.length === 0) return;
+    setSyncingHistory(true);
+    try {
+      const res = await api.importSelectedBattles(battleTimes);
+      triggerAlert("Import Successful", res.message || `Successfully imported ${res.synced_count || 0} match(es)!`, "success");
+      await loadUserStats();
+      setShowSyncModal(false);
+      setSyncPreview([]);
+      setSelectedBattles(new Set());
+    } catch (err) {
+      console.error(err);
+      triggerAlert("Import Failed", err.message || "Failed to import selected battles.", "error");
     } finally {
       setSyncingHistory(false);
     }
@@ -2190,6 +2214,100 @@ function App() {
         }}
         onClose={() => setShowHomeMapBrowser(false)}
       />
+
+      {/* Sync Preview Modal */}
+      {showSyncModal && (
+        <div className="modal-backdrop" onClick={() => setShowSyncModal(false)}>
+          <div className="glass-panel" style={{ width: '560px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: '24px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+              <h3 style={{ margin: 0 }}>📜 Select Battles to Import</h3>
+              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                {selectedBattles.size} of {syncPreview.length} selected
+              </span>
+            </div>
+            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 12px' }}>
+              Found {syncPreview.length} new battle{syncPreview.length !== 1 ? 's' : ''} in your Brawl Stars API log.
+            </p>
+
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+              <button className="btn btn-sm" onClick={() => setSelectedBattles(new Set(syncPreview.map(b => b.battle_time)))}>
+                Select All
+              </button>
+              <button className="btn btn-sm" onClick={() => setSelectedBattles(new Set())}>
+                Deselect All
+              </button>
+            </div>
+
+            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {syncPreview.map(b => {
+                const isSelected = selectedBattles.has(b.battle_time);
+                const brawlerAvatar = getBrawlerAvatar(brawlers, b.brawler_id);
+                return (
+                  <div
+                    key={b.battle_time}
+                    className="mp-suggestion-row"
+                    style={{
+                      cursor: 'pointer',
+                      border: `1px solid ${isSelected ? 'var(--color-ally)' : 'var(--border-glass)'}`,
+                      background: isSelected ? 'rgba(0,229,255,0.04)' : 'rgba(255,255,255,0.02)',
+                    }}
+                    onClick={() => {
+                      const next = new Set(selectedBattles);
+                      if (isSelected) next.delete(b.battle_time);
+                      else next.add(b.battle_time);
+                      setSelectedBattles(next);
+                    }}
+                  >
+                    <input type="checkbox" checked={isSelected} onChange={() => {}} style={{ marginRight: '6px', accentColor: 'var(--color-ally)' }} />
+
+                    {brawlerAvatar
+                      ? <img src={brawlerAvatar} alt={b.brawler_name} className="mp-sug-avatar" />
+                      : <div className="mp-sug-avatar-ph" />
+                    }
+
+                    <div className="mp-sug-info" style={{ flex: 1, minWidth: 0 }}>
+                      <span className="mp-sug-name">{b.brawler_name}</span>
+                      <span className="mp-sug-class">{b.map_name}</span>
+                    </div>
+
+                    <span className="mp-match-result-badge" style={{
+                      background: b.result === 'victory' ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,85,0.15)',
+                      color: b.result === 'victory' ? 'var(--color-ally)' : 'var(--color-enemy)',
+                      fontSize: '10px', padding: '2px 7px',
+                    }}>
+                      {b.result === 'victory' ? 'WIN' : 'LOSS'}
+                    </span>
+
+                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                      {b.draft_type === 'ranked'
+                        ? `🏅 ${getRankById(b.trophies)?.name || b.trophies}`
+                        : `🎮 ${b.trophies}🏆`}
+                    </span>
+                  </div>
+                );
+              })}
+              {syncPreview.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--color-text-muted)', fontSize: '13px' }}>
+                  No new battles available.
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: '14px', borderTop: '1px solid var(--border-glass)', paddingTop: '14px' }}>
+              <button className="btn" onClick={() => { setShowSyncModal(false); setSyncPreview([]); setSelectedBattles(new Set()); }}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={handleSyncImport}
+                disabled={syncingHistory || selectedBattles.size === 0}
+              >
+                {syncingHistory ? 'Importing...' : `Import Selected (${selectedBattles.size})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AlertModal
         isOpen={modalAlert.isOpen}

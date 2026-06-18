@@ -83,6 +83,11 @@ const { mockApi, mockSetGlobalActiveUser } = vi.hoisted(() => {
     saveMatch: vi.fn().mockResolvedValue({ id: 100 }),
     updateMatch: vi.fn().mockResolvedValue({ id: 100 }),
     linkMatchAPI: vi.fn().mockResolvedValue({ success: true }),
+    fetchSyncPreview: vi.fn().mockResolvedValue({ available: [
+      { battle_time: 'b1', map_name: 'Gem Grab Map', mode: 'Gem Grab', brawler_name: 'Shelly', brawler_id: '16000000', result: 'victory', draft_type: 'ranked', trophies: 500, is_star_player: true },
+      { battle_time: 'b2', map_name: 'Brawl Ball Map', mode: 'Brawl Ball', brawler_name: 'Colt', brawler_id: '16000001', result: 'defeat', draft_type: 'normal', trophies: 600, is_star_player: false },
+    ], count: 2 }),
+    importSelectedBattles: vi.fn().mockResolvedValue({ message: 'Imported 2 matches.', synced_count: 2 }),
     syncMatchesAPI: vi.fn().mockResolvedValue({ message: 'Synced 5 matches!', synced_count: 5 }),
     fetchMatches: vi.fn().mockResolvedValue(mockData.matches),
     savePerception: vi.fn().mockResolvedValue({ id: 1 }),
@@ -324,11 +329,12 @@ describe('Stats Dashboard & Battle Log', () => {
     await waitFor(() => { expect(mockApi.fetchLastBattle).toHaveBeenCalled() })
   })
 
-  it('sync history calls API', async () => {
+  it('sync history shows modal with available battles', async () => {
     render(<App />)
     await waitForWelcome()
     await userEvent.click(screen.getByText(/sync api history/i))
-    await waitFor(() => { expect(mockApi.syncMatchesAPI).toHaveBeenCalled() })
+    await waitFor(() => { expect(mockApi.fetchSyncPreview).toHaveBeenCalled() })
+    await waitFor(() => { expect(screen.getByText(/select battles to import/i)).toBeInTheDocument() })
   })
 
   it('navigates to mode profile from dashboard', async () => {
