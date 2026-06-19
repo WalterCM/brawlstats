@@ -1,6 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { api } from './services/api';
 import { getBrawlerAvatar } from './utils/helpers';
+import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
+import MatchFilterBar from './components/MatchFilterBar';
 
 const MODE_CONFIG = {
   'Gem Grab':  { icon: '💎', color: '#00e5ff', bg: 'rgba(0,229,255,0.12)',  border: 'rgba(0,229,255,0.35)'  },
@@ -26,7 +28,13 @@ function timeAgo(dateStr) {
   return `${d}d ago`;
 }
 
-export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], onBack, onBrawlerClick }) {
+export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack, onBrawlerClick }) {
+  const [timeRange, setTimeRange] = useState('all');
+  const [levelMin, setLevelMin] = useState(null);
+  const [levelMax, setLevelMax] = useState(null);
+  const [selectedTiers, setSelectedTiers] = useState([]);
+  const [selectedDraftType, setSelectedDraftType] = useState('All');
+
   const mapData = allMaps.find(m => String(m.id) === String(mapId));
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
@@ -45,9 +53,17 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
     return () => { cancelled = true; };
   }, [mapId]);
 
-  const mapMatches = useMemo(() =>
-    [...matches].filter(m => String(m.map_id) === String(mapId)).sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [matches, mapId]);
+  const mapMatches = useMemo(() => {
+    let filtered = [...matches];
+
+    if (selectedDraftType !== 'All') {
+      filtered = filtered.filter(m => m.draft_type === selectedDraftType.toLowerCase());
+    }
+
+    filtered = filterByTimeRange(filtered, timeRange);
+    filtered = filterByLevel(filtered, selectedDraftType !== 'All' ? selectedDraftType.toLowerCase() : null, { levelMin, levelMax, selectedTiers });
+    return filtered.filter(m => String(m.map_id) === String(mapId)).sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [matches, mapId, selectedDraftType, timeRange, levelMin, levelMax, selectedTiers]);
 
   const total  = mapMatches.length;
   const wins   = mapMatches.filter(m => m.result === 'victory').length;
@@ -147,6 +163,30 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
         </div>
 
         <button className="btn btn-secondary mp-back-btn" onClick={onBack}>◀ Back</button>
+      </div>
+
+      <div className="glass-panel" style={{ padding: '10px 16px', marginTop: '12px' }}>
+        <div className="filter-group-row" style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+          <div className="filter-control" style={{ flex: '1 1 160px' }}>
+            <label>Draft Type</label>
+            <select value={selectedDraftType} onChange={(e) => setSelectedDraftType(e.target.value)}>
+              <option value="All">🏆 All Formats</option>
+              <option value="Ranked">Competitive (Ranked)</option>
+              <option value="Normal">Normal (No Bans)</option>
+            </select>
+          </div>
+        </div>
+        <MatchFilterBar
+          timeRange={timeRange}
+          onTimeRangeChange={setTimeRange}
+          draftType={selectedDraftType}
+          levelMin={levelMin}
+          levelMax={levelMax}
+          onLevelChange={({ levelMin: lm, levelMax: lx }) => { setLevelMin(lm); setLevelMax(lx); }}
+          selectedTiers={selectedTiers}
+          onTiersChange={setSelectedTiers}
+          minNormalTrophies={minNormalTrophies}
+        />
       </div>
 
       {/* ── Secondary stats bar ── */}

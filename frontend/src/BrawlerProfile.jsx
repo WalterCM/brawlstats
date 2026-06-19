@@ -1,4 +1,6 @@
-import { useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
+import MatchFilterBar from './components/MatchFilterBar';
 
 // Pure SVG rolling win rate line chart
 function RollingWinRateChart({ matches, windowSize = 5, height = 120, width = 400 }) {
@@ -89,16 +91,41 @@ function getModeIcon(mode) {
   return MODE_ICONS_MAP[mode] || '⚔️';
 }
 
-export default function BrawlerProfile({ brawlerId, matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], onBack }) {
+export default function BrawlerProfile({ brawlerId, matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack }) {
+  const [timeRange, setTimeRange] = useState('all');
+  const [levelMin, setLevelMin] = useState(null);
+  const [levelMax, setLevelMax] = useState(null);
+  const [selectedTiers, setSelectedTiers] = useState([]);
+  const [selectedMode, setSelectedMode] = useState('All');
+  const [selectedDraftType, setSelectedDraftType] = useState('All');
+
   const getBrawler = (id) => brawlers.find(b => String(b.id) === String(id));
   const getMap = (id) => allMaps.find(m => String(m.id) === String(id));
 
   const brawler = getBrawler(brawlerId);
 
+  // Unique modes for this brawler
+  const brawlerModes = useMemo(() => {
+    const modes = new Set();
+    matches.filter(m => String(m.my_brawler_id) === String(brawlerId)).forEach(m => { if (m.mode) modes.add(m.mode); });
+    return ['All', ...Array.from(modes)];
+  }, [matches, brawlerId]);
+
   // Matches with this brawler
-  const myMatches = useMemo(() =>
-    [...matches].filter(m => String(m.my_brawler_id) === String(brawlerId)).sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [matches, brawlerId]);
+  const myMatches = useMemo(() => {
+    let filtered = [...matches];
+
+    if (selectedMode !== 'All') {
+      filtered = filtered.filter(m => m.mode === selectedMode);
+    }
+    if (selectedDraftType !== 'All') {
+      filtered = filtered.filter(m => m.draft_type === selectedDraftType.toLowerCase());
+    }
+
+    filtered = filterByTimeRange(filtered, timeRange);
+    filtered = filterByLevel(filtered, selectedDraftType !== 'All' ? selectedDraftType.toLowerCase() : null, { levelMin, levelMax, selectedTiers });
+    return filtered.filter(m => String(m.my_brawler_id) === String(brawlerId)).sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [matches, brawlerId, selectedMode, selectedDraftType, timeRange, levelMin, levelMax, selectedTiers]);
 
   const total = myMatches.length;
   const wins = myMatches.filter(m => m.result === 'victory').length;
@@ -253,6 +280,38 @@ export default function BrawlerProfile({ brawlerId, matches = [], perceptions = 
           )}
         </div>
         <button className="btn btn-secondary" onClick={onBack}>◀ Back</button>
+      </div>
+
+      <div className="glass-panel" style={{ padding: '10px 16px', marginTop: '12px' }}>
+        <div className="filter-group-row" style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+          <div className="filter-control" style={{ flex: '1 1 160px' }}>
+            <label>Game Mode</label>
+            <select value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
+              {brawlerModes.map(mode => (
+                <option key={mode} value={mode}>{mode === 'All' ? '🎮 All Modes' : `${getModeIcon(mode)} ${mode}`}</option>
+              ))}
+            </select>
+          </div>
+          <div className="filter-control" style={{ flex: '1 1 160px' }}>
+            <label>Draft Type</label>
+            <select value={selectedDraftType} onChange={(e) => setSelectedDraftType(e.target.value)}>
+              <option value="All">🏆 All Formats</option>
+              <option value="Ranked">Competitive (Ranked)</option>
+              <option value="Normal">Normal (No Bans)</option>
+            </select>
+          </div>
+        </div>
+        <MatchFilterBar
+          timeRange={timeRange}
+          onTimeRangeChange={setTimeRange}
+          draftType={selectedDraftType}
+          levelMin={levelMin}
+          levelMax={levelMax}
+          onLevelChange={({ levelMin: lm, levelMax: lx }) => { setLevelMin(lm); setLevelMax(lx); }}
+          selectedTiers={selectedTiers}
+          onTiersChange={setSelectedTiers}
+          minNormalTrophies={minNormalTrophies}
+        />
       </div>
 
       {total === 0 ? (

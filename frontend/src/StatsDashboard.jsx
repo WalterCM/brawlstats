@@ -1,17 +1,22 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { getRankById, getRankIconUrl } from './utils/helpers';
+import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
+import MatchFilterBar from './components/MatchFilterBar';
 
-export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], onClose, onBrawlerClick, onMapClick, onModeClick }) {
+export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onClose, onBrawlerClick, onMapClick, onModeClick }) {
   // Filter States
   const [selectedMode, setSelectedMode] = useState('All');
   const [selectedDraftType, setSelectedDraftType] = useState('All');
   const [selectedClass, setSelectedClass] = useState('All');
-  const [timeframe, setTimeframe] = useState('All'); // 'All', '10', '25'
+  const [timeRange, setTimeRange] = useState('all');
+  const [levelMin, setLevelMin] = useState(null);
+  const [levelMax, setLevelMax] = useState(null);
+  const [selectedTiers, setSelectedTiers] = useState([]);
   const [brawlerSort, setBrawlerSort] = useState('games'); // 'games', 'winrate', 'trophies'
   const [brawlerPage, setBrawlerPage] = useState(0);
   const [sessionPage, setSessionPage] = useState(0);
 
-  useEffect(() => { setBrawlerPage(0); }, [brawlerSort, selectedMode, selectedDraftType, selectedClass, timeframe]);
+  useEffect(() => { setBrawlerPage(0); }, [brawlerSort, selectedMode, selectedDraftType, selectedClass, timeRange]);
 
   // Global meta lookup
   const globalWRLookup = useMemo(() => {
@@ -100,14 +105,16 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       });
     }
 
-    // Apply Timeframe Limit
-    if (timeframe !== 'All') {
-      const limit = parseInt(timeframe, 10);
-      sorted = sorted.slice(0, limit);
-    }
+    // Apply Time Range
+    sorted = filterByTimeRange(sorted, timeRange);
+
+    // Apply Level Filter
+    sorted = filterByLevel(sorted, selectedDraftType !== 'All' ? selectedDraftType.toLowerCase() : null, {
+      levelMin, levelMax, selectedTiers,
+    });
 
     return sorted;
-  }, [matches, selectedMode, selectedDraftType, selectedClass, timeframe, getBrawlerClass]);
+  }, [matches, selectedMode, selectedDraftType, selectedClass, timeRange, levelMin, levelMax, selectedTiers, getBrawlerClass]);
 
   // 2. KPI Calculations
   const kpis = useMemo(() => {
@@ -392,26 +399,19 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
             </select>
           </div>
 
-          <div className="filter-control">
-            <label>Timeframe Limit</label>
-            <div className="timeframe-buttons">
-              {[
-                { val: 'All', lbl: 'All time' },
-                { val: '25', lbl: 'Last 25' },
-                { val: '10', lbl: 'Last 10' }
-              ].map(opt => (
-                <button
-                  key={opt.val}
-                  type="button"
-                  className={`time-btn ${timeframe === opt.val ? 'active' : ''}`}
-                  onClick={() => setTimeframe(opt.val)}
-                >
-                  {opt.lbl}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
+
+        <MatchFilterBar
+          timeRange={timeRange}
+          onTimeRangeChange={setTimeRange}
+          draftType={selectedDraftType}
+          levelMin={levelMin}
+          levelMax={levelMax}
+          onLevelChange={({ levelMin: lm, levelMax: lx }) => { setLevelMin(lm); setLevelMax(lx); }}
+          selectedTiers={selectedTiers}
+          onTiersChange={setSelectedTiers}
+          minNormalTrophies={minNormalTrophies}
+        />
       </div>
 
       {/* KPI Section */}

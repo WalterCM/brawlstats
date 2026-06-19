@@ -1781,6 +1781,7 @@ function App() {
           brawlers={brawlers}
           allMaps={allMaps}
           brawlerMeta={brawlerMeta}
+          minNormalTrophies={minNormalTrophies}
           onClose={() => setCurrentView('menu')}
           onBrawlerClick={(brawlerId) => {
             setSelectedProfileBrawlerId(brawlerId);
@@ -1803,6 +1804,7 @@ function App() {
           brawlers={brawlers}
           allMaps={allMaps}
           brawlerMeta={brawlerMeta}
+          minNormalTrophies={minNormalTrophies}
           onBack={() => setCurrentView('stats')}
         />
       ) : currentView === 'map-profile' ? (
@@ -1812,6 +1814,7 @@ function App() {
           brawlers={brawlers}
           allMaps={allMaps}
           brawlerMeta={brawlerMeta}
+          minNormalTrophies={minNormalTrophies}
           onBack={() => setCurrentView('stats')}
           onBrawlerClick={(brawlerId) => {
             setSelectedProfileBrawlerId(brawlerId);
@@ -1825,6 +1828,7 @@ function App() {
           brawlers={brawlers}
           allMaps={allMaps}
           brawlerMeta={brawlerMeta}
+          minNormalTrophies={minNormalTrophies}
           onBack={() => setCurrentView('stats')}
           onBrawlerClick={(brawlerId) => {
             setSelectedProfileBrawlerId(brawlerId);

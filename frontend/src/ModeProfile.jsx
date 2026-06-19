@@ -1,4 +1,6 @@
-import { useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
+import MatchFilterBar from './components/MatchFilterBar';
 
 const MODE_ICONS = {
   bounty: '⭐',
@@ -62,12 +64,38 @@ function RollingWinRateChart({ matches, windowSize = 5, height = 120, width = 40
   );
 }
 
-export default function ModeProfile({ mode, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], onBack, onBrawlerClick, onMapClick }) {
+export default function ModeProfile({ mode, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack, onBrawlerClick, onMapClick }) {
+  const [timeRange, setTimeRange] = useState('all');
+  const [levelMin, setLevelMin] = useState(null);
+  const [levelMax, setLevelMax] = useState(null);
+  const [selectedTiers, setSelectedTiers] = useState([]);
+  const [selectedDraftType, setSelectedDraftType] = useState('All');
+  const [selectedClass, setSelectedClass] = useState('All');
+
+  const brawlerClasses = ['All', 'Damage Dealer', 'Tank', 'Marksman', 'Assassin', 'Support', 'Controller', 'Artillery'];
+
   useEffect(() => { window.scrollTo({ top: 0, behavior: 'instant' }); }, [mode]);
 
-  const modeMatches = useMemo(() =>
-    [...matches].filter(m => m.mode === mode).sort((a, b) => new Date(b.date) - new Date(a.date)),
-    [matches, mode]
+  const getBrawlerClass = (id) => {
+    const found = brawlers.find(b => String(b.id) === String(id));
+    return found ? found.class_name : '';
+  };
+
+  const modeMatches = useMemo(() => {
+    let filtered = [...matches];
+
+    if (selectedDraftType !== 'All') {
+      filtered = filtered.filter(m => m.draft_type === selectedDraftType.toLowerCase());
+    }
+
+    if (selectedClass !== 'All') {
+      filtered = filtered.filter(m => getBrawlerClass(m.my_brawler_id) === selectedClass);
+    }
+
+    filtered = filterByTimeRange(filtered, timeRange);
+    filtered = filterByLevel(filtered, selectedDraftType !== 'All' ? selectedDraftType.toLowerCase() : null, { levelMin, levelMax, selectedTiers });
+    return filtered.filter(m => m.mode === mode).sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [matches, mode, selectedDraftType, selectedClass, timeRange, levelMin, levelMax, selectedTiers]
   );
 
   const total = modeMatches.length;
@@ -169,6 +197,38 @@ export default function ModeProfile({ mode, matches = [], brawlers = [], allMaps
           )}
         </div>
         <button className="btn btn-secondary" onClick={onBack}>◀ Back</button>
+      </div>
+
+      <div className="glass-panel" style={{ padding: '10px 16px', marginTop: '12px' }}>
+        <div className="filter-group-row" style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
+          <div className="filter-control" style={{ flex: '1 1 160px' }}>
+            <label>Draft Type</label>
+            <select value={selectedDraftType} onChange={(e) => setSelectedDraftType(e.target.value)}>
+              <option value="All">🏆 All Formats</option>
+              <option value="Ranked">Competitive (Ranked)</option>
+              <option value="Normal">Normal (No Bans)</option>
+            </select>
+          </div>
+          <div className="filter-control" style={{ flex: '1 1 160px' }}>
+            <label>Brawler Class</label>
+            <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}>
+              {brawlerClasses.map(cls => (
+                <option key={cls} value={cls}>{cls === 'All' ? '⚡ All Classes' : cls}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <MatchFilterBar
+          timeRange={timeRange}
+          onTimeRangeChange={setTimeRange}
+          draftType={selectedDraftType}
+          levelMin={levelMin}
+          levelMax={levelMax}
+          onLevelChange={({ levelMin: lm, levelMax: lx }) => { setLevelMin(lm); setLevelMax(lx); }}
+          selectedTiers={selectedTiers}
+          onTiersChange={setSelectedTiers}
+          minNormalTrophies={minNormalTrophies}
+        />
       </div>
 
       {total === 0 ? (
