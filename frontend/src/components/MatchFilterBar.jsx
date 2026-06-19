@@ -61,17 +61,16 @@ export default function MatchFilterBar({
   };
 
   return (
-    <div className="match-filter-bar" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-      <div className="filter-group-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-        <label className="filter-bar-label">Time:</label>
-        <div className="filter-bar-buttons" style={{ display: 'flex', gap: '4px' }}>
+    <div className="match-filter-bar">
+      <div className="filter-group-row">
+        <label className="filter-bar-label">Time</label>
+        <div className="filter-bar-buttons">
           {TIME_OPTIONS.map(opt => (
             <button
               key={opt.value}
               type="button"
-              className={`filter-btn btn btn-sm ${timeRange === opt.value ? 'active' : ''}`}
+              className={`filter-btn ${timeRange === opt.value ? 'active' : ''}`}
               onClick={() => onTimeRangeChange(opt.value)}
-              style={timeRange === opt.value ? { background: 'var(--color-ally)', color: '#000', borderColor: 'var(--color-ally)' } : {}}
             >
               {opt.label}
             </button>
@@ -80,20 +79,19 @@ export default function MatchFilterBar({
       </div>
 
       {showLevel && (
-        <div className="filter-group-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="filter-group-row">
           <label className="filter-bar-label">
-            {isNormal ? 'Trophies:' : 'Rank:'}
+            {isNormal ? 'Trophies' : 'Rank'}
           </label>
-          <div className="filter-bar-buttons" style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          <div className="filter-bar-buttons">
             {isNormal && trophyRanges.map(range => {
               const active = levelMin === range.min && levelMax === (range.max ?? null);
               return (
                 <button
                   key={range.label}
                   type="button"
-                  className={`filter-btn btn btn-sm ${active ? 'active' : ''}`}
+                  className={`filter-btn ${active ? 'active' : ''}`}
                   onClick={() => handleTrophyClick(range)}
-                  style={active ? { background: 'var(--color-ally)', color: '#000', borderColor: 'var(--color-ally)' } : {}}
                 >
                   {range.label}
                 </button>
@@ -105,9 +103,8 @@ export default function MatchFilterBar({
                 <button
                   key={group.label}
                   type="button"
-                  className={`filter-btn btn btn-sm ${active ? 'active-tier' : ''}`}
+                  className={`filter-btn ${active ? 'active-tier' : ''}`}
                   onClick={() => handleTierToggle(group.ids)}
-                  style={active ? { background: 'var(--color-ally)', color: '#000', borderColor: 'var(--color-ally)' } : {}}
                 >
                   {group.label}
                 </button>
@@ -117,9 +114,8 @@ export default function MatchFilterBar({
           {hasActiveLevel && (
             <button
               type="button"
-              className="btn btn-sm"
+              className="btn-clear-filter"
               onClick={handleClearLevel}
-              style={{ color: 'var(--color-text-muted)', fontSize: '11px', marginLeft: '4px' }}
             >
               ✕ clear
             </button>

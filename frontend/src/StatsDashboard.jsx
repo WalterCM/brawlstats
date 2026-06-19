@@ -1,17 +1,26 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useFilters } from './context/FilterContext';
 import { getRankById, getRankIconUrl } from './utils/helpers';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
 import MatchFilterBar from './components/MatchFilterBar';
 
 export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onClose, onBrawlerClick, onMapClick, onModeClick }) {
-  // Filter States
-  const [selectedMode, setSelectedMode] = useState('All');
-  const [selectedDraftType, setSelectedDraftType] = useState('All');
-  const [selectedClass, setSelectedClass] = useState('All');
-  const [timeRange, setTimeRange] = useState('all');
-  const [levelMin, setLevelMin] = useState(null);
-  const [levelMax, setLevelMax] = useState(null);
-  const [selectedTiers, setSelectedTiers] = useState([]);
+  const {
+    selectedMode,
+    setSelectedMode,
+    selectedDraftType,
+    setSelectedDraftType,
+    selectedClass,
+    setSelectedClass,
+    timeRange,
+    setTimeRange,
+    levelMin,
+    setLevelMin,
+    levelMax,
+    setLevelMax,
+    selectedTiers,
+    setSelectedTiers
+  } = useFilters();
   const [brawlerSort, setBrawlerSort] = useState('games'); // 'games', 'winrate', 'trophies'
   const [brawlerPage, setBrawlerPage] = useState(0);
   const [sessionPage, setSessionPage] = useState(0);
@@ -167,6 +176,20 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       ? `${streakCount} Win${streakCount > 1 ? 's' : ''}`
       : null;
 
+    const recent7dMatches = filteredMatches.filter(m => {
+      const matchDate = new Date(m.date).getTime();
+      return matchDate >= (Date.now() - 7 * 24 * 60 * 60 * 1000);
+    });
+    
+    const recentWR = recent7dMatches.length > 0
+      ? Math.round((recent7dMatches.filter(m => m.result === 'victory').length / recent7dMatches.length) * 100)
+      : null;
+
+    let trend = null;
+    if (recentWR !== null && timeRange !== '1d' && timeRange !== '7d') {
+      trend = recentWR - Math.round((wins / total) * 100);
+    }
+
     return {
       winRate: Math.round((wins / total) * 100),
       total,
@@ -174,8 +197,81 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       avgTrophies,
       streak: streakDisplay,
       playerRankId,
+      trend,
     };
-  }, [filteredMatches]);
+  }, [filteredMatches, timeRange]);
+
+  // Format Dual KPIs calculation (overall)
+  const formatKpis = useMemo(() => {
+    const normalMatches = matches.filter(m => m.draft_type === 'normal');
+    const rankedMatches = matches.filter(m => m.draft_type === 'ranked');
+
+    const normalWins = normalMatches.filter(m => m.result === 'victory').length;
+    const rankedWins = rankedMatches.filter(m => m.result === 'victory').length;
+
+    const normalTrophies = normalMatches.filter(m => m.my_brawler_trophies && m.my_brawler_trophies > 50);
+    const avgNormalTrophies = normalTrophies.length > 0
+      ? Math.round(normalTrophies.reduce((acc, m) => acc + m.my_brawler_trophies, 0) / normalTrophies.length)
+      : 0;
+
+    const rankedRanks = rankedMatches.filter(m => m.my_brawler_trophies).map(m => m.my_brawler_trophies);
+    const rankFreq = {};
+    rankedRanks.forEach(id => { rankFreq[id] = (rankFreq[id] || 0) + 1; });
+    const playerRankId = rankedRanks.length > 0
+      ? Object.entries(rankFreq).sort((a, b) => b[1] - a[1])[0][0]
+      : null;
+
+    return {
+      normal: {
+        total: normalMatches.length,
+        winRate: normalMatches.length > 0 ? Math.round((normalWins / normalMatches.length) * 100) : 0,
+        avgTrophies: avgNormalTrophies
+      },
+      ranked: {
+        total: rankedMatches.length,
+        winRate: rankedMatches.length > 0 ? Math.round((rankedWins / rankedMatches.length) * 100) : 0,
+        rankId: playerRankId
+      }
+    };
+  }, [matches]);
+
+  // Smart Alerts calculation (last 7 days by class)
+  const smartAlerts = useMemo(() => {
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const recent = matches.filter(m => new Date(m.date).getTime() >= oneWeekAgo);
+    
+    const classStats = {};
+    recent.forEach(m => {
+      const bClass = getBrawlerClass(m.my_brawler_id);
+      if (!bClass) return;
+      if (!classStats[bClass]) {
+        classStats[bClass] = { games: 0, wins: 0 };
+      }
+      classStats[bClass].games++;
+      if (m.result === 'victory') {
+        classStats[bClass].wins++;
+      }
+    });
+
+    const alerts = [];
+    Object.entries(classStats).forEach(([className, stats]) => {
+      if (stats.games >= 3) {
+        const wr = Math.round((stats.wins / stats.games) * 100);
+        if (wr >= 65) {
+          alerts.push({
+            type: 'hot',
+            text: `Hot Streak: You have a ${wr}% Win Rate playing ${className} brawlers in the last 7 days (${stats.games} matches)!`
+          });
+        } else if (wr <= 40) {
+          alerts.push({
+            type: 'cold',
+            text: `Performance Alert: Your Win Rate with ${className} brawlers is ${wr}% in the last 7 days (${stats.games} matches).`
+          });
+        }
+      }
+    });
+    return alerts;
+  }, [matches, getBrawlerClass]);
 
   // 3. Stats by Brawler
   const brawlerStats = useMemo(() => {
@@ -415,11 +511,18 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       </div>
 
       {/* KPI Section */}
-      <div className="kpi-grid">
+      <div className="kpi-grid" style={{ marginBottom: '20px' }}>
         <div className="kpi-card glass-panel glow-ally">
           <div className="kpi-icon-wrapper circle-ally">🏆</div>
           <div className="kpi-details">
-            <span className="kpi-value">{kpis.winRate}%</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+              <span className="kpi-value">{kpis.winRate}%</span>
+              {/* {kpis.trend !== null && kpis.trend !== 0 && (
+                <span style={{ fontSize: '11px', fontWeight: '800', color: kpis.trend > 0 ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
+                  {kpis.trend > 0 ? `▲ +${kpis.trend}%` : `▼ ${kpis.trend}%`} vs 7d
+                </span>
+              )} */}
+            </div>
             <span className="kpi-label">Win Rate</span>
             <div className="kpi-bar-track">
               <div className="kpi-bar-fill ally-bg" style={{ width: `${kpis.winRate}%` }}></div>
@@ -484,6 +587,60 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
           </div>
         )}
       </div>
+
+      {/* Format Comparison Section (Commented out per user request)
+      {selectedDraftType === 'All' && (
+        <div className="glass-panel" style={{ padding: '16px 20px', marginBottom: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px' }}>
+          <div>
+            <h4 style={{ margin: '0 0 10px', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-muted)' }}>Casual Format (Normal)</h4>
+            <div style={{ display: 'flex', gap: '25px' }}>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#fff' }}>{formatKpis.normal.winRate}%</div>
+                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Win Rate</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#fff' }}>{formatKpis.normal.total}</div>
+                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Games</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#fff' }}>{formatKpis.normal.avgTrophies || 'N/A'}</div>
+                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Avg Trophies</div>
+              </div>
+            </div>
+          </div>
+          <div className="divider-left-mobile" style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '20px' }}>
+            <h4 style={{ margin: '0 0 10px', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--color-text-muted)' }}>Competitive Format (Ranked)</h4>
+            <div style={{ display: 'flex', gap: '25px' }}>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#fff' }}>{formatKpis.ranked.winRate}%</div>
+                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Win Rate</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '18px', fontWeight: '800', color: '#fff' }}>{formatKpis.ranked.total}</div>
+                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Games</div>
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  {formatKpis.ranked.rankId ? (
+                    <>
+                      {getRankIconUrl(formatKpis.ranked.rankId) && (
+                        <img src={getRankIconUrl(formatKpis.ranked.rankId)} alt="" style={{ width: 18, height: 18 }} />
+                      )}
+                      <span style={{ fontSize: '14px', fontWeight: '800', color: '#fff' }}>
+                        {getRankById(formatKpis.ranked.rankId)?.name.split(' ')[0] || formatKpis.ranked.rankId}
+                      </span>
+                    </>
+                  ) : (
+                    <span style={{ fontSize: '18px', fontWeight: '800', color: '#fff' }}>N/A</span>
+                  )}
+                </div>
+                <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Top Rank</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      */}
 
       {/* Result Strip */}
       {resultStrip.length > 0 && (
@@ -603,7 +760,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                     <th>Class</th>
                     <th>Games</th>
                     <th>Win Rate</th>
-                    <th style={{ width: '80px' }}>Trend</th>
+                    {/* <th style={{ width: '80px' }}>Trend</th> */}
                     <th>Global WR</th>
                     <th>vs Global</th>
                     <th>Avg Trophies</th>
@@ -647,7 +804,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                           </div>
                         </div>
                       </td>
-                      <td style={{ padding: '2px 4px' }}>
+                       {/* <td style={{ padding: '2px 4px' }}>
                         {(() => {
                           const pts = brawlerSparklines[b.id];
                           if (!pts || pts.length < 2) return <span style={{ color: 'var(--color-text-muted)', fontSize: '10px' }}>—</span>;
@@ -664,7 +821,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
                             </svg>
                           );
                         })()}
-                      </td>
+                      </td> */}
                       <td className="global-wr-td">
                         {globalWRLookup[b.id] != null ? `${globalWRLookup[b.id]}%` : '—'}
                       </td>
@@ -814,6 +971,30 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
               </div>
             );
           })()}
+
+          {/* Smart Alerts inside left column */}
+          {smartAlerts.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '20px' }}>
+              {smartAlerts.map((alert, idx) => (
+                <div 
+                  key={`alert-${idx}`} 
+                  className={`glass-panel ${alert.type === 'hot' ? 'glow-ally' : 'glow-enemy'}`}
+                  style={{ 
+                    padding: '10px 15px', 
+                    fontSize: '12px', 
+                    fontWeight: '600', 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: '10px',
+                    borderLeft: `4px solid ${alert.type === 'hot' ? 'var(--color-ally)' : 'var(--color-enemy)'}`
+                  }}
+                >
+                  <span>{alert.type === 'hot' ? '🔥' : '⚠️'}</span>
+                  <span style={{ color: '#fff' }}>{alert.text}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
         </div>
 

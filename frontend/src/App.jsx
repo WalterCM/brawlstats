@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import { api, setGlobalActiveUser } from './services/api';
 import './App.css';
 import StatsDashboard from './StatsDashboard';
@@ -19,7 +20,8 @@ function App() {
 
   const [me, setMe] = useState(null);
   const [authError, setAuthError] = useState('');
-  const [currentView, setCurrentView] = useState('menu'); // 'menu' | 'draft' | 'stats' | 'profile' | 'brawler-profile' | 'map-profile' | 'mode-profile'
+  const navigate = useNavigate();
+  const location = useLocation();
   const [selectedProfileBrawlerId, setSelectedProfileBrawlerId] = useState(null);
   const [selectedMapId, setSelectedMapId] = useState(null);
   const [selectedMode, setSelectedMode] = useState(null);
@@ -168,7 +170,7 @@ function App() {
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('brawl_active_user', JSON.stringify(currentUser));
-      setCurrentView('menu');
+      navigate('/');
       loadCatalogs();
     } else {
       localStorage.removeItem('brawl_active_user');
@@ -249,7 +251,7 @@ function App() {
     await loadMapsForDraft(type === 'ranked');
     setDraftType(type);
     resetDraft(type, firstPickTeam, type === 'ranked' ? enableBans : false);
-    setCurrentView('draft');
+    navigate('/draft');
   };
 
   const loadUserStats = async () => {
@@ -319,7 +321,7 @@ function App() {
     setGlobalActiveUser('', '');
     setCurrentUser(null);
     setShowProfileDropdown(false);
-    setCurrentView('menu');
+    navigate('/');
     resetDraft();
   };
 
@@ -528,7 +530,7 @@ function App() {
       } else {
         setDraftType('normal');
       }
-      setCurrentView('draft');
+      navigate('/draft');
 
       const paddedAllies = [...data.allies_picked];
       while (paddedAllies.length < 3) paddedAllies.push(null);
@@ -814,7 +816,7 @@ function App() {
         editingMatchId ? "Match Updated" : "Match Logged", 
         editingMatchId ? "Match data and matchup perceptions updated successfully!" : "Match and matchup perceptions logged successfully!", 
         "success",
-        () => setCurrentView('menu')
+        () => navigate('/')
       );
     } catch (err) {
       console.error(err);
@@ -1021,13 +1023,18 @@ function App() {
         </div>
 
         <div className="header-actions-group" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-          {currentView === 'draft' && (
-            <button className="btn btn-secondary" onClick={() => setCurrentView('menu')}>
+          {location.pathname === '/draft' && (
+            <button className="btn btn-secondary" onClick={() => navigate('/')}>
               ◀ Exit Draft Tool
             </button>
           )}
-          {currentView === 'profile' && (
-            <button className="btn btn-secondary" onClick={() => setCurrentView('menu')}>
+          {location.pathname === '/settings' && (
+            <button className="btn btn-secondary" onClick={() => navigate('/')}>
+              ◀ Back to Home
+            </button>
+          )}
+          {location.pathname.startsWith('/stats') && (
+            <button className="btn btn-secondary" onClick={() => navigate('/')}>
               ◀ Back to Home
             </button>
           )}
@@ -1058,7 +1065,7 @@ function App() {
                 <button 
                   className="dropdown-item"
                   onClick={() => {
-                    setCurrentView('profile');
+                    navigate('/settings');
                     setShowProfileDropdown(false);
                   }}
                 >
@@ -1083,7 +1090,8 @@ function App() {
       </header>
 
       {/* Main Grid / Dashboard Hub */}
-      {currentView === 'draft' ? (
+      <Routes>
+        <Route path="/draft" element={
         <div className={`main-grid ${isLeftPanelCollapsed ? 'left-collapsed' : ''}`}>
 
         {/* Left Panel: History & Perceptions */}
@@ -1644,7 +1652,8 @@ function App() {
           </div>
         </section>
       </div>
-      ) : currentView === 'profile' ? (
+        } />
+        <Route path="/settings" element={
         <div className="welcome-menu-container" style={{ justifyContent: 'center', padding: '40px 20px' }}>
           <div className="welcome-card glass-panel" style={{ maxWidth: '500px', width: '100%', margin: '0 auto', textAlign: 'left' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '25px' }}>
@@ -1765,7 +1774,7 @@ function App() {
                 </button>
                 <button 
                   className="btn btn-secondary"
-                  onClick={() => setCurrentView('menu')}
+                  onClick={() => navigate('/')}
                   style={{ padding: '12px 20px', fontSize: '13px', borderRadius: '6px' }}
                 >
                   Cancel
@@ -1774,7 +1783,8 @@ function App() {
             </div>
           </div>
         </div>
-      ) : currentView === 'stats' ? (
+        } />
+        <Route path="/stats" element={
         <StatsDashboard
           matches={matches}
           perceptions={perceptions}
@@ -1782,21 +1792,22 @@ function App() {
           allMaps={allMaps}
           brawlerMeta={brawlerMeta}
           minNormalTrophies={minNormalTrophies}
-          onClose={() => setCurrentView('menu')}
+          onClose={() => navigate('/')}
           onBrawlerClick={(brawlerId) => {
             setSelectedProfileBrawlerId(brawlerId);
-            setCurrentView('brawler-profile');
+            navigate(`/stats/brawler/${brawlerId}`);
           }}
           onMapClick={(mapId) => {
             setSelectedMapId(mapId);
-            setCurrentView('map-profile');
+            navigate(`/stats/map/${mapId}`);
           }}
           onModeClick={(mode) => {
             setSelectedMode(mode);
-            setCurrentView('mode-profile');
+            navigate(`/stats/mode/${mode}`);
           }}
         />
-      ) : currentView === 'brawler-profile' ? (
+        } />
+        <Route path="/stats/brawler/:brawlerId" element={
         <BrawlerProfile
           brawlerId={selectedProfileBrawlerId}
           matches={matches}
@@ -1805,9 +1816,10 @@ function App() {
           allMaps={allMaps}
           brawlerMeta={brawlerMeta}
           minNormalTrophies={minNormalTrophies}
-          onBack={() => setCurrentView('stats')}
+          onBack={() => navigate(-1)}
         />
-      ) : currentView === 'map-profile' ? (
+        } />
+        <Route path="/stats/map/:mapId" element={
         <MapProfile
           mapId={selectedMapId}
           matches={matches}
@@ -1815,13 +1827,14 @@ function App() {
           allMaps={allMaps}
           brawlerMeta={brawlerMeta}
           minNormalTrophies={minNormalTrophies}
-          onBack={() => setCurrentView('stats')}
+          onBack={() => navigate(-1)}
           onBrawlerClick={(brawlerId) => {
             setSelectedProfileBrawlerId(brawlerId);
-            setCurrentView('brawler-profile');
+            navigate(`/stats/brawler/${brawlerId}`);
           }}
         />
-      ) : currentView === 'mode-profile' ? (
+        } />
+        <Route path="/stats/mode/:modeName" element={
         <ModeProfile
           mode={selectedMode}
           matches={matches}
@@ -1829,17 +1842,18 @@ function App() {
           allMaps={allMaps}
           brawlerMeta={brawlerMeta}
           minNormalTrophies={minNormalTrophies}
-          onBack={() => setCurrentView('stats')}
+          onBack={() => navigate(-1)}
           onBrawlerClick={(brawlerId) => {
             setSelectedProfileBrawlerId(brawlerId);
-            setCurrentView('brawler-profile');
+            navigate(`/stats/brawler/${brawlerId}`);
           }}
           onMapClick={(mapId) => {
             setSelectedMapId(mapId);
-            setCurrentView('map-profile');
+            navigate(`/stats/map/${mapId}`);
           }}
         />
-      ) : (
+        } />
+        <Route path="/" element={
         <div className="welcome-menu-container">
           {/* ── Map Browser ── */}
           <div className="home-map-browser glass-panel" onClick={() => setShowHomeMapBrowser(true)}>
@@ -1886,7 +1900,7 @@ function App() {
               
               <button 
                 className="menu-card btn-enter-draft stats-dashboard-btn" 
-                onClick={() => setCurrentView('stats')}
+                onClick={() => navigate('/stats')}
                 style={{ width: '100%', marginTop: '10px' }}
               >
                 <div className="menu-card-icon">📊</div>
@@ -2075,7 +2089,9 @@ function App() {
             </div>
           </div>
         </div>
-      )}
+        } />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
 
 
 
@@ -2214,7 +2230,7 @@ function App() {
         onSelectMap={(m) => {
           setShowHomeMapBrowser(false);
           setSelectedMapId(m.id);
-          setCurrentView('map-profile');
+          navigate(`/stats/map/${m.id}`);
         }}
         onClose={() => setShowHomeMapBrowser(false)}
       />

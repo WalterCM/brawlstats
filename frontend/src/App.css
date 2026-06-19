@@ -1512,6 +1512,99 @@
   border-color: #a855f7;
 }
 
+/* Match Filter Bar & Buttons Modern Glassmorphism Styling */
+.match-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 15px;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.match-filter-bar .filter-group-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-bar-label {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  min-width: 70px;
+}
+
+.filter-bar-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  outline: none;
+}
+
+.filter-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(0, 229, 255, 0.4);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.filter-btn.active {
+  background: linear-gradient(135deg, #00e5ff 0%, #00b0ff 100%);
+  border-color: #00e5ff;
+  color: #000;
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+  transform: translateY(0);
+}
+
+.filter-btn.active-tier {
+  background: linear-gradient(135deg, #a855f7 0%, #ec4899 100%);
+  border-color: #a855f7;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.45);
+  transform: translateY(0);
+}
+
+.btn-clear-filter {
+  background: transparent;
+  border: none;
+  color: rgba(239, 68, 68, 0.7);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  padding: 6px 10px;
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+
+.btn-clear-filter:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
 .timeframe-buttons {
   display: flex;
   background: rgba(0, 0, 0, 0.3);

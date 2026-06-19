@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { useFilters } from './context/FilterContext';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
 import MatchFilterBar from './components/MatchFilterBar';
 
@@ -64,13 +66,24 @@ function RollingWinRateChart({ matches, windowSize = 5, height = 120, width = 40
   );
 }
 
-export default function ModeProfile({ mode, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack, onBrawlerClick, onMapClick }) {
-  const [timeRange, setTimeRange] = useState('all');
-  const [levelMin, setLevelMin] = useState(null);
-  const [levelMax, setLevelMax] = useState(null);
-  const [selectedTiers, setSelectedTiers] = useState([]);
-  const [selectedDraftType, setSelectedDraftType] = useState('All');
-  const [selectedClass, setSelectedClass] = useState('All');
+export default function ModeProfile({ mode: propMode, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack, onBrawlerClick, onMapClick }) {
+  const params = useParams();
+  const mode = propMode || params.modeName;
+
+  const {
+    timeRange,
+    setTimeRange,
+    levelMin,
+    setLevelMin,
+    levelMax,
+    setLevelMax,
+    selectedTiers,
+    setSelectedTiers,
+    selectedDraftType,
+    setSelectedDraftType,
+    selectedClass,
+    setSelectedClass
+  } = useFilters();
 
   const brawlerClasses = ['All', 'Damage Dealer', 'Tank', 'Marksman', 'Assassin', 'Support', 'Controller', 'Artillery'];
 
@@ -81,22 +94,71 @@ export default function ModeProfile({ mode, matches = [], brawlers = [], allMaps
     return found ? found.class_name : '';
   };
 
-  const modeMatches = useMemo(() => {
+  const modeMatchesBase = useMemo(() => {
     let filtered = [...matches];
 
     if (selectedDraftType !== 'All') {
       filtered = filtered.filter(m => m.draft_type === selectedDraftType.toLowerCase());
     }
 
-    if (selectedClass !== 'All') {
-      filtered = filtered.filter(m => getBrawlerClass(m.my_brawler_id) === selectedClass);
-    }
-
     filtered = filterByTimeRange(filtered, timeRange);
     filtered = filterByLevel(filtered, selectedDraftType !== 'All' ? selectedDraftType.toLowerCase() : null, { levelMin, levelMax, selectedTiers });
     return filtered.filter(m => m.mode === mode).sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [matches, mode, selectedDraftType, selectedClass, timeRange, levelMin, levelMax, selectedTiers]
-  );
+  }, [matches, mode, selectedDraftType, timeRange, levelMin, levelMax, selectedTiers]);
+
+  const modeMatches = useMemo(() => {
+    if (selectedClass === 'All') return modeMatchesBase;
+    return modeMatchesBase.filter(m => getBrawlerClass(m.my_brawler_id) === selectedClass);
+  }, [modeMatchesBase, selectedClass]);
+
+  // Class Performance Matrix in this game mode
+  const classPerformanceMatrix = useMemo(() => {
+    const classes = ['Damage Dealer', 'Tank', 'Marksman', 'Assassin', 'Support', 'Controller', 'Artillery'];
+    const stats = {};
+    classes.forEach(c => { stats[c] = { games: 0, wins: 0 }; });
+
+    modeMatchesBase.forEach(m => {
+      const cls = getBrawlerClass(m.my_brawler_id);
+      if (cls && stats[cls] !== undefined) {
+        stats[cls].games++;
+        if (m.result === 'victory') {
+          stats[cls].wins++;
+        }
+      }
+    });
+
+    return Object.entries(stats).map(([className, data]) => ({
+      className,
+      games: data.games,
+      winRate: data.games > 0 ? Math.round((data.wins / data.games) * 100) : null
+    }));
+  }, [modeMatchesBase, brawlers]);
+
+  // Winning Map + Brawler Combos
+  const winningCombos = useMemo(() => {
+    const combos = {};
+    modeMatchesBase.forEach(m => {
+      if (!m.my_brawler_id || !m.map_id) return;
+      const key = `${m.my_brawler_id}_${m.map_id}`;
+      if (!combos[key]) {
+        combos[key] = { brawlerId: m.my_brawler_id, mapId: m.map_id, games: 0, wins: 0 };
+      }
+      combos[key].games++;
+      if (m.result === 'victory') {
+        combos[key].wins++;
+      }
+    });
+
+    return Object.values(combos)
+      .map(c => ({
+        ...c,
+        brawlerName: brawlers.find(br => String(br.id) === String(c.brawlerId))?.name || 'Unknown',
+        mapName: allMaps.find(mp => String(mp.id) === String(c.mapId))?.name || 'Unknown',
+        winRate: Math.round((c.wins / c.games) * 100)
+      }))
+      .sort((a, b) => b.games - a.games || b.winRate - a.winRate)
+      .slice(0, 3);
+  }, [modeMatchesBase, brawlers, allMaps]);
 
   const total = modeMatches.length;
   const wins = modeMatches.filter(m => m.result === 'victory').length;
@@ -236,7 +298,97 @@ export default function ModeProfile({ mode, matches = [], brawlers = [], allMaps
           No matches logged in {mode} yet.
         </div>
       ) : (
-        <div className="dashboard-main-grid" style={{ marginTop: '20px' }}>
+        <>
+          {/* Smart Insights Panel */}
+          <div className="glass-panel" style={{ padding: '16px 20px', marginTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+            {/* Class Performance Matrix */}
+            <div>
+              <h4 style={{ margin: '0 0 12px', fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.5px' }}>Class Performance Matrix</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '8px' }}>
+                {classPerformanceMatrix.map(c => {
+                  const hasData = c.winRate !== null;
+                  const isGood = hasData && c.winRate >= 55;
+                  const isBad = hasData && c.winRate <= 45;
+                  const cardBg = !hasData 
+                    ? 'rgba(255,255,255,0.01)' 
+                    : isGood 
+                    ? 'rgba(0,229,255,0.06)' 
+                    : isBad 
+                    ? 'rgba(255,64,129,0.06)' 
+                    : 'rgba(255,255,255,0.03)';
+                  const cardBorder = !hasData
+                    ? 'rgba(255,255,255,0.04)'
+                    : isGood
+                    ? 'rgba(0,229,255,0.2)'
+                    : isBad
+                    ? 'rgba(255,64,129,0.2)'
+                    : 'rgba(255,255,255,0.08)';
+                  const wrColor = !hasData
+                    ? 'var(--color-text-muted)'
+                    : isGood
+                    ? 'var(--color-ally)'
+                    : isBad
+                    ? 'var(--color-enemy)'
+                    : '#fff';
+
+                  return (
+                    <div 
+                      key={c.className} 
+                      style={{ 
+                        background: cardBg, 
+                        border: `1px solid ${cardBorder}`, 
+                        padding: '8px 10px', 
+                        borderRadius: '6px', 
+                        textAlign: 'center' 
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.className}</div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: wrColor, marginTop: '4px' }}>
+                        {hasData ? `${c.winRate}%` : 'N/A'}
+                      </div>
+                      <div style={{ fontSize: '9px', color: 'var(--color-text-muted)', marginTop: '2px' }}>{c.games} games</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Winning Map + Brawler Combos */}
+            {winningCombos.length > 0 && (
+              <div className="divider-left-mobile" style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '20px' }}>
+                <h4 style={{ margin: '0 0 12px', fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.5px' }}>Top Winning Combos</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {winningCombos.map((combo, idx) => (
+                    <div 
+                      key={`combo-${idx}`} 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        background: 'rgba(255,255,255,0.02)', 
+                        padding: '8px 12px', 
+                        borderRadius: '6px', 
+                        border: '1px solid var(--border-glass)' 
+                      }}
+                    >
+                      <div>
+                        <strong style={{ fontSize: '12px', color: '#fff' }}>{combo.brawlerName}</strong>
+                        <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginLeft: '6px' }}>on {combo.mapName}</span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '12px', fontWeight: '800', color: combo.winRate >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
+                          {combo.winRate}% WR
+                        </span>
+                        <div style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>{combo.games} games</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="dashboard-main-grid" style={{ marginTop: '20px' }}>
           {/* Left column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
@@ -417,6 +569,7 @@ export default function ModeProfile({ mode, matches = [], brawlers = [], allMaps
 
           </div>
         </div>
+        </>
       )}
     </div>
   );

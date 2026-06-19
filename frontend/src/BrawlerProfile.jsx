@@ -1,6 +1,9 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { useFilters } from './context/FilterContext';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
 import MatchFilterBar from './components/MatchFilterBar';
+import { getRankIconUrl } from './utils/helpers';
 
 // Pure SVG rolling win rate line chart
 function RollingWinRateChart({ matches, windowSize = 5, height = 120, width = 400 }) {
@@ -91,13 +94,24 @@ function getModeIcon(mode) {
   return MODE_ICONS_MAP[mode] || '⚔️';
 }
 
-export default function BrawlerProfile({ brawlerId, matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack }) {
-  const [timeRange, setTimeRange] = useState('all');
-  const [levelMin, setLevelMin] = useState(null);
-  const [levelMax, setLevelMax] = useState(null);
-  const [selectedTiers, setSelectedTiers] = useState([]);
-  const [selectedMode, setSelectedMode] = useState('All');
-  const [selectedDraftType, setSelectedDraftType] = useState('All');
+export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack }) {
+  const params = useParams();
+  const brawlerId = propBrawlerId || params.brawlerId;
+
+  const {
+    timeRange,
+    setTimeRange,
+    levelMin,
+    setLevelMin,
+    levelMax,
+    setLevelMax,
+    selectedTiers,
+    setSelectedTiers,
+    selectedMode,
+    setSelectedMode,
+    selectedDraftType,
+    setSelectedDraftType
+  } = useFilters();
 
   const getBrawler = (id) => brawlers.find(b => String(b.id) === String(id));
   const getMap = (id) => allMaps.find(m => String(m.id) === String(id));
@@ -216,6 +230,136 @@ export default function BrawlerProfile({ brawlerId, matches = [], perceptions = 
   const maxAllied = draftFreq.allied[0]?.count || 1;
   const maxEnemy = draftFreq.enemy[0]?.count || 1;
 
+  // Breakdown of stats by Rank and Trophy ranges
+  const breakdownStats = useMemo(() => {
+    // Keep timeRange and mode filters for the breakdown, but ignore draftType and level bounds
+    let baseMatches = [...matches].filter(m => String(m.my_brawler_id) === String(brawlerId));
+    if (selectedMode !== 'All') {
+      baseMatches = baseMatches.filter(m => m.mode === selectedMode);
+    }
+    baseMatches = filterByTimeRange(baseMatches, timeRange);
+
+    const ranked = {
+      gold: { name: 'Gold', games: 0, wins: 0, iconId: 7 },
+      diamond: { name: 'Diamond', games: 0, wins: 0, iconId: 10 },
+      mythic: { name: 'Mythic', games: 0, wins: 0, iconId: 13 },
+      other: { name: 'Other Ranks', games: 0, wins: 0, iconId: 16 }
+    };
+
+    const normal = {
+      mid: { name: '750 - 1000 🏆', games: 0, wins: 0 },
+      high: { name: '1000+ 🏆', games: 0, wins: 0 }
+    };
+
+    baseMatches.forEach(m => {
+      const isWin = m.result === 'victory';
+      if (m.draft_type === 'ranked') {
+        const val = Number(m.my_brawler_trophies) || 0;
+        if (val >= 7 && val <= 9) {
+          ranked.gold.games++;
+          if (isWin) ranked.gold.wins++;
+        } else if (val >= 10 && val <= 12) {
+          ranked.diamond.games++;
+          if (isWin) ranked.diamond.wins++;
+        } else if (val >= 13 && val <= 15) {
+          ranked.mythic.games++;
+          if (isWin) ranked.mythic.wins++;
+        } else {
+          ranked.other.games++;
+          if (isWin) ranked.other.wins++;
+        }
+      } else {
+        const val = Number(m.my_brawler_trophies) || 0;
+        if (val >= 750 && val <= 1000) {
+          normal.mid.games++;
+          if (isWin) normal.mid.wins++;
+        } else if (val > 1000) {
+          normal.high.games++;
+          if (isWin) normal.high.wins++;
+        }
+      }
+    });
+
+    const formatItem = (item) => ({
+      ...item,
+      winRate: item.games > 0 ? Math.round((item.wins / item.games) * 100) : null
+    });
+
+    return {
+      ranked: [
+        formatItem(ranked.gold),
+        formatItem(ranked.diamond),
+        formatItem(ranked.mythic),
+        formatItem(ranked.other)
+      ].filter(r => r.games > 0),
+      normal: [
+        formatItem(normal.mid),
+        formatItem(normal.high)
+      ].filter(r => r.games > 0)
+    };
+  }, [matches, brawlerId, selectedMode, timeRange]);
+
+  // Best & Worst Mode Highlights
+  const modeHighlights = useMemo(() => {
+    const candidates = modeStats.filter(g => g.games >= 3);
+    if (candidates.length === 0) return { best: null, worst: null };
+    const sortedByWR = [...candidates].sort((a, b) => b.winRate - a.winRate || b.games - a.games);
+    const best = sortedByWR[0];
+    const worst = sortedByWR[sortedByWR.length - 1];
+    if (best.mode === worst.mode) {
+      return { best, worst: null };
+    }
+    return { best, worst };
+  }, [modeStats]);
+
+  // Signature Map Highlight
+  const signatureMap = useMemo(() => {
+    const candidates = mapStats.filter(g => g.games >= 2);
+    if (candidates.length === 0) return null;
+    const sortedByWR = [...candidates].sort((a, b) => b.winRate - a.winRate || b.games - a.games);
+    return sortedByWR[0];
+  }, [mapStats]);
+
+  // Synergy & Counter stats (win rate when playing with or against them)
+  const synergyStats = useMemo(() => {
+    const alliedWR = {};
+    const enemyWR = {};
+    
+    myMatches.forEach(m => {
+      const isWin = m.result === 'victory';
+      (m.draft_events || []).forEach(evt => {
+        if (evt.type !== 'pick') return;
+        if (String(evt.brawler_id) === String(brawlerId)) return; // skip self
+        
+        const target = evt.team === 'allied' ? alliedWR : enemyWR;
+        if (!target[evt.brawler_id]) {
+          target[evt.brawler_id] = { id: evt.brawler_id, games: 0, wins: 0 };
+        }
+        target[evt.brawler_id].games++;
+        if (isWin) target[evt.brawler_id].wins++;
+      });
+    });
+
+    const calculateWR = (obj) => {
+      return Object.values(obj)
+        .filter(item => item.games >= 2) // minimum 2 games for reliability
+        .map(item => ({
+          ...item,
+          winRate: Math.round((item.wins / item.games) * 100),
+          brawler: getBrawler(item.id)
+        }))
+        .sort((a, b) => b.winRate - a.winRate);
+    };
+
+    const synergies = calculateWR(alliedWR);
+    const counters = calculateWR(enemyWR).reverse(); // lowest WR at top (hardest enemies)
+
+    return {
+      topAllies: synergies.slice(0, 3),
+      hardestEnemies: counters.slice(0, 3)
+    };
+  }, [myMatches, brawlerId, getBrawler]);
+
   if (!brawler) return null;
 
   // Scroll to top when this profile mounts or brawlerId changes
@@ -319,7 +463,78 @@ export default function BrawlerProfile({ brawlerId, matches = [], perceptions = 
           No matches logged with {brawler.name} yet.
         </div>
       ) : (
-        <div className="dashboard-main-grid" style={{ marginTop: '20px' }}>
+        <>
+          {/* Smart Insights Panel */}
+          <div className="glass-panel" style={{ padding: '16px 20px', marginTop: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+            {/* Mode Highlights */}
+            {(modeHighlights.best || modeHighlights.worst) && (
+              <div>
+                <h4 style={{ margin: '0 0 12px', fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.5px' }}>Mode Recommendation</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {modeHighlights.best && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                      <span style={{ fontSize: '18px' }}>🥇</span>
+                      <div>
+                        <strong>{getModeIcon(modeHighlights.best.mode)} {modeHighlights.best.mode}</strong>
+                        <div style={{ fontSize: '11px', color: 'var(--color-ally)', fontWeight: '700' }}>Best: {modeHighlights.best.winRate}% WR ({modeHighlights.best.games} games)</div>
+                      </div>
+                    </div>
+                  )}
+                  {modeHighlights.worst && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '6px' }}>
+                      <span style={{ fontSize: '18px' }}>⚠️</span>
+                      <div>
+                        <strong>{getModeIcon(modeHighlights.worst.mode)} {modeHighlights.worst.mode}</strong>
+                        <div style={{ fontSize: '11px', color: 'var(--color-enemy)', fontWeight: '700' }}>Avoid: {modeHighlights.worst.winRate}% WR ({modeHighlights.worst.games} games)</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Signature Map */}
+            {signatureMap && (
+              <div className="divider-left-mobile" style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '20px' }}>
+                <h4 style={{ margin: '0 0 12px', fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.5px' }}>Signature Map</h4>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ fontSize: '24px' }}>🗺️</span>
+                  <div>
+                    <strong style={{ display: 'block', fontSize: '14px', color: '#fff' }}>{signatureMap.name}</strong>
+                    <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{getModeIcon(signatureMap.mode)} {signatureMap.mode}</span>
+                    <div style={{ fontSize: '12px', color: 'var(--color-ally)', fontWeight: '700', marginTop: '2px' }}>{signatureMap.winRate}% Win Rate ({signatureMap.games} games)</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Synergy & Counters */}
+            {(synergyStats.topAllies.length > 0 || synergyStats.hardestEnemies.length > 0) && (
+              <div className="divider-left-mobile" style={{ borderLeft: '1px solid rgba(255,255,255,0.08)', paddingLeft: '20px' }}>
+                <h4 style={{ margin: '0 0 12px', fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.5px' }}>Synergy & Counter Insights</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '11px' }}>
+                  {synergyStats.topAllies.length > 0 && (
+                    <div>
+                      <strong style={{ color: 'var(--color-text-muted)' }}>Best Allies: </strong>
+                      <span style={{ color: '#fff' }}>
+                        {synergyStats.topAllies.map(s => `${s.brawler?.name || '?'}(${s.winRate}%)`).join(', ')}
+                      </span>
+                    </div>
+                  )}
+                  {synergyStats.hardestEnemies.length > 0 && (
+                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '6px' }}>
+                      <strong style={{ color: 'var(--color-text-muted)' }}>Avoid Facing: </strong>
+                      <span style={{ color: '#fff' }}>
+                        {synergyStats.hardestEnemies.map(s => `${s.brawler?.name || '?'}(${s.winRate}%)`).join(', ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="dashboard-main-grid" style={{ marginTop: '20px' }}>
           {/* Left column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
@@ -332,27 +547,100 @@ export default function BrawlerProfile({ brawlerId, matches = [], perceptions = 
               <RollingWinRateChart matches={myMatches} windowSize={5} />
             </div>
 
-            {/* Allied brawlers */}
-            {draftFreq.allied.length > 0 && (
-              <div className="dashboard-section glass-panel">
-                <h3>🤝 Most Frequent Allies</h3>
-                <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 12px' }}>Brawlers most often on your team</p>
-                {draftFreq.allied.map(item => (
-                  <FreqBar key={item.id} name={item.brawler?.name || '?'} avatar={item.brawler?.image_url} count={item.count} maxCount={maxAllied} color="var(--color-ally)" />
-                ))}
-              </div>
-            )}
+            {/* Competitive Rank Breakdown */}
+            <div className="dashboard-section glass-panel">
+              <h3>🏅 Competitive Rank Breakdown</h3>
+              <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 12px' }}>
+                Your performance in Ranked formats segmented by tier
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {breakdownStats.ranked.length === 0 ? (
+                  <div className="empty-msg" style={{ padding: '8px 0', fontSize: '11px', color: 'var(--color-text-muted)' }}>No ranked matches recorded with this brawler.</div>
+                ) : (
+                  breakdownStats.ranked.map(row => {
+                    const hasGames = row.games > 0;
+                    const wr = row.winRate;
+                    const isGood = hasGames && wr >= 55;
+                    const isBad = hasGames && wr <= 45;
+                    const wrColor = !hasGames ? 'var(--color-text-muted)' : isGood ? 'var(--color-ally)' : isBad ? 'var(--color-enemy)' : '#fff';
 
-            {/* Enemy brawlers */}
-            {draftFreq.enemy.length > 0 && (
-              <div className="dashboard-section glass-panel">
-                <h3>⚔️ Most Frequent Enemies</h3>
-                <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 12px' }}>Brawlers most often against you</p>
-                {draftFreq.enemy.map(item => (
-                  <FreqBar key={item.id} name={item.brawler?.name || '?'} avatar={item.brawler?.image_url} count={item.count} maxCount={maxEnemy} color="var(--color-enemy)" />
-                ))}
+                    return (
+                      <div key={row.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                          {getRankIconUrl(row.iconId) && (
+                            <img src={getRankIconUrl(row.iconId)} alt="" style={{ width: '20px', height: '20px', objectFit: 'contain' }} />
+                          )}
+                          <div style={{ minWidth: 0 }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>{row.name}</span>
+                            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{row.games} match{row.games !== 1 ? 'es' : ''}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '120px' }}>
+                          <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                            {hasGames && (
+                              <div style={{
+                                width: `${wr}%`,
+                                height: '100%',
+                                background: isGood ? 'var(--color-ally)' : isBad ? 'var(--color-enemy)' : '#fff',
+                                borderRadius: '3px'
+                              }} />
+                            )}
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: wrColor, width: '36px', textAlign: 'right' }}>
+                            {hasGames ? `${wr}%` : '—'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
-            )}
+            </div>
+
+            {/* Casual Trophy Breakdown */}
+            <div className="dashboard-section glass-panel">
+              <h3>🏆 Casual Trophy Breakdown</h3>
+              <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 12px' }}>
+                Your performance in Casual (Normal) formats segmented by trophies
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {breakdownStats.normal.length === 0 ? (
+                  <div className="empty-msg" style={{ padding: '8px 0', fontSize: '11px', color: 'var(--color-text-muted)' }}>No casual matches recorded above 750 trophies.</div>
+                ) : (
+                  breakdownStats.normal.map(row => {
+                    const hasGames = row.games > 0;
+                    const wr = row.winRate;
+                    const isGood = hasGames && wr >= 55;
+                    const isBad = hasGames && wr <= 45;
+                    const wrColor = !hasGames ? 'var(--color-text-muted)' : isGood ? 'var(--color-ally)' : isBad ? 'var(--color-enemy)' : '#fff';
+
+                    return (
+                      <div key={row.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ fontSize: '12px', fontWeight: 600, color: '#fff' }}>{row.name}</span>
+                          <div style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{row.games} match{row.games !== 1 ? 'es' : ''}</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '120px' }}>
+                          <div style={{ flex: 1, height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>
+                            {hasGames && (
+                              <div style={{
+                                width: `${wr}%`,
+                                height: '100%',
+                                background: isGood ? 'var(--color-ally)' : isBad ? 'var(--color-enemy)' : '#fff',
+                                borderRadius: '3px'
+                              }} />
+                            )}
+                          </div>
+                          <span style={{ fontSize: '12px', fontWeight: '800', color: wrColor, width: '36px', textAlign: 'right' }}>
+                            {hasGames ? `${wr}%` : '—'}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Right column */}
@@ -483,6 +771,7 @@ export default function BrawlerProfile({ brawlerId, matches = [], perceptions = 
 
           </div>
         </div>
+        </>
       )}
     </div>
   );

@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { useFilters } from './context/FilterContext';
 import { api } from './services/api';
 import { getBrawlerAvatar } from './utils/helpers';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
@@ -28,12 +30,22 @@ function timeAgo(dateStr) {
   return `${d}d ago`;
 }
 
-export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack, onBrawlerClick }) {
-  const [timeRange, setTimeRange] = useState('all');
-  const [levelMin, setLevelMin] = useState(null);
-  const [levelMax, setLevelMax] = useState(null);
-  const [selectedTiers, setSelectedTiers] = useState([]);
-  const [selectedDraftType, setSelectedDraftType] = useState('All');
+export default function MapProfile({ mapId: propMapId, matches = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack, onBrawlerClick }) {
+  const params = useParams();
+  const mapId = propMapId || params.mapId;
+
+  const {
+    timeRange,
+    setTimeRange,
+    levelMin,
+    setLevelMin,
+    levelMax,
+    setLevelMax,
+    selectedTiers,
+    setSelectedTiers,
+    selectedDraftType,
+    setSelectedDraftType
+  } = useFilters();
 
   const mapData = allMaps.find(m => String(m.id) === String(mapId));
   const [suggestions, setSuggestions] = useState([]);
@@ -109,6 +121,53 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
     return result;
   }, [brawlerMeta]);
 
+  // Map Meta Archetype based on meta suggestions
+  const mapArchetype = useMemo(() => {
+    if (suggestions.length === 0) return null;
+    
+    const classScores = {};
+    suggestions.forEach(s => {
+      const b = brawlers.find(br => String(br.id) === String(s.brawler.id));
+      if (!b || !b.class_name) return;
+      
+      const className = b.class_name;
+      if (!classScores[className]) {
+        classScores[className] = { sum: 0, count: 0 };
+      }
+      classScores[className].sum += s.components?.A_adjusted_win_rate || 0.5;
+      classScores[className].count++;
+    });
+
+    const entries = Object.entries(classScores).map(([name, data]) => ({
+      name,
+      avgWR: Math.round((data.sum / data.count) * 100),
+      count: data.count
+    }));
+
+    if (entries.length === 0) return null;
+    entries.sort((a, b) => b.count - a.count || b.avgWR - a.avgWR);
+
+    return {
+      primaryClass: entries[0].name,
+      avgWR: entries[0].avgWR,
+      allClasses: entries
+    };
+  }, [suggestions, brawlers]);
+
+  // User Pocket Picks (comfort brawlers that are good on this map)
+  const pocketPicks = useMemo(() => {
+    return brawlerStats
+      .filter(b => b.games >= 2 && b.winRate >= 55)
+      .map(b => {
+        const isMeta = suggestions.findIndex(s => String(s.brawler.id) === String(b.id));
+        return {
+          ...b,
+          metaRank: isMeta !== -1 ? isMeta + 1 : null
+        };
+      })
+      .slice(0, 3);
+  }, [brawlerStats, suggestions]);
+
   if (!mapData) return null;
 
   const modeCfg = getModeConfig(mapData.mode);
@@ -133,6 +192,16 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
             </span>
             {mapData.is_ranked && (
               <span className="mp-ranked-badge">🏆 Ranked</span>
+            )}
+            {mapArchetype && (
+              <span className="mp-archetype-badge" style={{ background: 'rgba(168, 85, 247, 0.15)', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#c084fc', padding: '4px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold' }}>
+                {(() => {
+                  const name = mapArchetype.primaryClass;
+                  const emojis = { Marksman: '🎯', Tank: '🛡️', Assassin: '⚡', 'Damage Dealer': '⚔️', Support: '💚', Controller: '🌀', Artillery: '💣' };
+                  const emoji = emojis[name] || '👾';
+                  return `${emoji} ${name} Meta`;
+                })()}
+              </span>
             )}
           </div>
           <p className="mp-header-sub">{total} match{total !== 1 ? 'es' : ''} logged</p>
@@ -240,7 +309,44 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
           <p style={{ fontSize: '12px', marginTop: '8px' }}>Play a match and sync it to see your stats here.</p>
         </div>
       ) : (
-        <div className="dashboard-main-grid" style={{ marginTop: '20px' }}>
+        <>
+          {/* Pocket Picks Panel */}
+          {pocketPicks.length > 0 && (
+            <div className="glass-panel" style={{ padding: '16px 20px', marginTop: '20px' }}>
+              <h4 style={{ margin: '0 0 12px', fontSize: '13px', textTransform: 'uppercase', color: 'var(--color-text-muted)', letterSpacing: '0.5px' }}>🌟 Your Pocket Picks (Meta + comfort)</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '15px' }}>
+                {pocketPicks.map(b => (
+                  <div 
+                    key={b.id} 
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-glass)', cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                    onClick={() => onBrawlerClick && onBrawlerClick(b.id)}
+                  >
+                    {b.avatar ? (
+                      <img src={b.avatar} alt={b.name} style={{ width: '32px', height: '32px', borderRadius: '50%', border: '2.5px solid var(--color-ally)' }} />
+                    ) : (
+                      <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+                    )}
+                    <div>
+                      <strong style={{ display: 'block', fontSize: '13px', color: '#fff' }}>{b.name}</strong>
+                      <div style={{ display: 'flex', gap: '6px', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                        <span style={{ color: 'var(--color-ally)', fontWeight: 'bold' }}>{b.winRate}% WR</span>
+                        <span>·</span>
+                        <span>{b.games} games</span>
+                        {b.metaRank && (
+                          <>
+                            <span>·</span>
+                            <span style={{ color: 'var(--color-gold)' }}>Meta #{b.metaRank}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="dashboard-main-grid" style={{ marginTop: '20px' }}>
 
           {/* ── Left column ── */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -473,9 +579,9 @@ export default function MapProfile({ mapId, matches = [], brawlers = [], allMaps
                 {mapMatches.length === 0 && <div className="empty-msg">No recent matches on this map.</div>}
               </div>
             </div>
-
           </div>
         </div>
+        </>
       )}
     </div>
   );
