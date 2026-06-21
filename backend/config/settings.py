@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'apps.brawlers.apps.BrawlersConfig',
     'apps.matches.apps.MatchesConfig',
     'apps.drafting.apps.DraftingConfig',
+    'apps.clubs.apps.ClubsConfig',
 ]
 
 MIDDLEWARE = [

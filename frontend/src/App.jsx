@@ -6,6 +6,7 @@ import StatsDashboard from './StatsDashboard';
 import BrawlerProfile from './BrawlerProfile';
 import MapProfile from './MapProfile';
 import ModeProfile from './ModeProfile';
+import ClubDashboard from './ClubDashboard';
 import { deduplicateMaps, getMapName, getBrawlerName, getBrawlerAvatar, getModeIcon, getRankById, getRankIconUrl } from './utils/helpers';
 import MatchTeamsBanner from './components/MatchTeamsBanner';
 import AlertModal from './components/AlertModal';
@@ -27,6 +28,11 @@ function App() {
   const [selectedMode, setSelectedMode] = useState(null);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showHomeMapBrowser, setShowHomeMapBrowser] = useState(false);
+  const [authTab, setAuthTab] = useState('passwordless'); // 'passwordless', 'login', 'register'
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [registerUsername, setRegisterUsername] = useState('');
+  const [registerPassword, setRegisterPassword] = useState('');
 
   // Connection State
   const [backendConnected, setBackendConnected] = useState(true);
@@ -314,6 +320,38 @@ function App() {
       setNewPlayerTag('');
     } catch (err) {
       setAuthError(err.message || 'Failed to register with tag. Make sure it is valid.');
+    }
+  };
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    if (!loginUsername.trim() || !loginPassword) return;
+    setAuthError('');
+    try {
+      const data = await api.login(loginUsername.trim(), loginPassword);
+      const userSession = { id: data.token, token: data.token, name: data.username };
+      setGlobalActiveUser(data.token, data.username);
+      setCurrentUser(userSession);
+      setLoginUsername('');
+      setLoginPassword('');
+    } catch (err) {
+      setAuthError(err.message || 'Login failed. Check credentials.');
+    }
+  };
+
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    if (!registerUsername.trim() || !registerPassword) return;
+    setAuthError('');
+    try {
+      const data = await api.register(registerUsername.trim(), registerPassword);
+      const userSession = { id: data.token, token: data.token, name: data.username };
+      setGlobalActiveUser(data.token, data.username);
+      setCurrentUser(userSession);
+      setRegisterUsername('');
+      setRegisterPassword('');
+    } catch (err) {
+      setAuthError(err.message || 'Registration failed. Username may be taken.');
     }
   };
 
@@ -875,6 +913,40 @@ function App() {
           <h1>BRAWL STATS</h1>
           <p className="subtitle">Game Hub & Analytics</p>
 
+          {/* Auth Tab Selector */}
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '10px' }}>
+            <button
+              onClick={() => { setAuthTab('passwordless'); setAuthError(''); }}
+              style={{
+                background: 'none', border: 'none', color: authTab === 'passwordless' ? 'var(--color-ally)' : 'var(--color-text-muted)',
+                fontWeight: 'bold', cursor: 'pointer', padding: '6px 12px', fontSize: '14px',
+                borderBottom: authTab === 'passwordless' ? '2px solid var(--color-ally)' : 'none'
+              }}
+            >
+              ⚡ Quick Access (Tag)
+            </button>
+            <button
+              onClick={() => { setAuthTab('login'); setAuthError(''); }}
+              style={{
+                background: 'none', border: 'none', color: authTab === 'login' ? 'var(--color-ally)' : 'var(--color-text-muted)',
+                fontWeight: 'bold', cursor: 'pointer', padding: '6px 12px', fontSize: '14px',
+                borderBottom: authTab === 'login' ? '2px solid var(--color-ally)' : 'none'
+              }}
+            >
+              🔑 Log In
+            </button>
+            <button
+              onClick={() => { setAuthTab('register'); setAuthError(''); }}
+              style={{
+                background: 'none', border: 'none', color: authTab === 'register' ? 'var(--color-ally)' : 'var(--color-text-muted)',
+                fontWeight: 'bold', cursor: 'pointer', padding: '6px 12px', fontSize: '14px',
+                borderBottom: authTab === 'register' ? '2px solid var(--color-ally)' : 'none'
+              }}
+            >
+              👤 Sign Up
+            </button>
+          </div>
+
           {authError && (
             <div className="auth-error-banner" style={{ margin: '15px 0', borderRadius: '8px', padding: '12px', background: 'rgba(255, 0, 127, 0.1)', border: '1px solid rgba(255, 0, 127, 0.3)', color: 'var(--color-enemy)', fontWeight: 'bold' }}>
               ❌ {authError}
@@ -882,121 +954,206 @@ function App() {
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', marginTop: '20px' }}>
-            {/* Profile Selector */}
-            <div>
-              <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '15px', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Select Player Profile
-              </h3>
-              {loadingPlayers ? (
-                <div style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>Loading profiles...</div>
-              ) : availablePlayers.length === 0 ? (
-                <div style={{ color: 'var(--color-text-muted)', fontSize: '13px', background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '8px', border: '1px dashed var(--border-glass)' }}>
-                  No player profiles found. Register your Brawl Stars Player Tag below to get started!
+            {/* Tab 1: Passwordless Tag Selection */}
+            {authTab === 'passwordless' && (
+              <>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '15px', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Select Player Profile
+                  </h3>
+                  {loadingPlayers ? (
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: '13px' }}>Loading profiles...</div>
+                  ) : availablePlayers.length === 0 ? (
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: '13px', background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '8px', border: '1px dashed var(--border-glass)' }}>
+                      No player profiles found. Register your Brawl Stars Player Tag below to get started!
+                    </div>
+                  ) : (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
+                      {availablePlayers.map(player => (
+                        <button
+                          key={player.id}
+                          onClick={() => handleSelectProfile(player)}
+                          style={{
+                            background: 'rgba(255, 255, 255, 0.05)',
+                            border: '1px solid var(--border-glass)',
+                            borderRadius: '10px',
+                            padding: '16px',
+                            color: '#fff',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+                            e.currentTarget.style.transform = 'translateY(-2px)';
+                            e.currentTarget.style.borderColor = 'var(--color-ally)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                            e.currentTarget.style.borderColor = 'var(--border-glass)';
+                          }}
+                        >
+                          {player.avatar_id ? (
+                            <img 
+                              src={`https://cdn.brawlify.com/profile-icons/regular/${player.avatar_id}.png`} 
+                              alt="" 
+                              style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(0, 229, 255, 0.3)' }} 
+                            />
+                          ) : (
+                            <div style={{ fontSize: '24px' }}>👤</div>
+                          )}
+                          <div style={{ fontWeight: 'bold', fontSize: '14px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {player.name}
+                          </div>
+                          <div style={{
+                            fontSize: '10px',
+                            background: 'rgba(0, 229, 255, 0.15)',
+                            color: 'var(--color-ally)',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontWeight: '700',
+                            marginTop: '2px'
+                          }}>
+                            {player.player_tag}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '12px' }}>
-                  {availablePlayers.map(player => (
-                    <button
-                      key={player.id}
-                      onClick={() => handleSelectProfile(player)}
+
+                <div style={{ height: '1px', background: 'var(--border-glass)' }}></div>
+
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Create New Profile
+                  </h3>
+                  <form onSubmit={handleCreateProfileSubmit} style={{ display: 'flex', gap: '10px' }}>
+                    <input
+                      type="text"
+                      placeholder="Enter Player Tag (e.g. #GQ9u8vr8)"
+                      value={newPlayerTag}
+                      onChange={(e) => setNewPlayerTag(e.target.value)}
                       style={{
-                        background: 'rgba(255, 255, 255, 0.05)',
+                        flex: 1,
+                        background: 'rgba(0, 0, 0, 0.2)',
                         border: '1px solid var(--border-glass)',
-                        borderRadius: '10px',
-                        padding: '16px',
+                        borderRadius: '8px',
+                        padding: '12px 14px',
                         color: '#fff',
-                        cursor: 'pointer',
-                        textAlign: 'center',
-                        transition: 'all 0.2s ease',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '6px'
+                        fontSize: '14px',
+                        outline: 'none'
                       }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.borderColor = 'var(--color-ally)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-                        e.currentTarget.style.transform = 'translateY(0)';
-                        e.currentTarget.style.borderColor = 'var(--border-glass)';
+                      required
+                    />
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      style={{
+                        padding: '12px 20px',
+                        background: 'linear-gradient(135deg, var(--color-ally) 0%, #00838f 100%)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: 'bold',
+                        cursor: 'pointer'
                       }}
                     >
-                      {player.avatar_id ? (
-                        <img 
-                          src={`https://cdn.brawlify.com/profile-icons/regular/${player.avatar_id}.png`} 
-                          alt="" 
-                          style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(0, 229, 255, 0.3)' }} 
-                        />
-                      ) : (
-                        <div style={{ fontSize: '24px' }}>👤</div>
-                      )}
-                      <div style={{ fontWeight: 'bold', fontSize: '14px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {player.name}
-                      </div>
-                      <div style={{
-                        fontSize: '10px',
-                        background: 'rgba(0, 229, 255, 0.15)',
-                        color: 'var(--color-ally)',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
-                        fontWeight: '700',
-                        marginTop: '2px'
-                      }}>
-                        {player.player_tag}
-                      </div>
+                      🚀 Load Profile
                     </button>
-                  ))}
+                  </form>
+                  <small style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '8px', lineHeight: '1.4' }}>
+                    We will contact the Brawl Stars API to fetch your official username automatically.
+                  </small>
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
-            <div style={{ height: '1px', background: 'var(--border-glass)' }}></div>
-
-            {/* Create Profile */}
-            <div>
-              <h3 style={{ fontSize: '16px', fontWeight: '800', marginBottom: '12px', color: '#fff', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                Create New Profile
-              </h3>
-              <form onSubmit={handleCreateProfileSubmit} style={{ display: 'flex', gap: '10px' }}>
-                <input
-                  type="text"
-                  placeholder="Enter Player Tag (e.g. #GQ9u8vr8)"
-                  value={newPlayerTag}
-                  onChange={(e) => setNewPlayerTag(e.target.value)}
-                  style={{
-                    flex: 1,
-                    background: 'rgba(0, 0, 0, 0.2)',
-                    border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    padding: '12px 14px',
-                    color: '#fff',
-                    fontSize: '14px',
-                    outline: 'none'
-                  }}
-                  required
-                />
+            {/* Tab 2: Username & Password Login */}
+            {authTab === 'login' && (
+              <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Username</label>
+                  <input
+                    type="text"
+                    placeholder="Enter username"
+                    value={loginUsername}
+                    onChange={(e) => setLoginUsername(e.target.value)}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--border-glass)',
+                      borderRadius: '8px', padding: '12px 14px', color: '#fff', fontSize: '14px', outline: 'none'
+                    }}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Password</label>
+                  <input
+                    type="password"
+                    placeholder="Enter password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--border-glass)',
+                      borderRadius: '8px', padding: '12px 14px', color: '#fff', fontSize: '14px', outline: 'none'
+                    }}
+                    required
+                  />
+                </div>
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  style={{
-                    padding: '12px 20px',
-                    background: 'linear-gradient(135deg, var(--color-ally) 0%, #00838f 100%)',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer'
-                  }}
+                  style={{ width: '100%', padding: '12px', fontWeight: 'bold', marginTop: '10px' }}
                 >
-                  🚀 Load Profile
+                  🔑 Secure Log In
                 </button>
               </form>
-              <small style={{ display: 'block', fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '8px', lineHeight: '1.4' }}>
-                We will contact the Brawl Stars API to fetch your official username automatically.
-              </small>
-            </div>
+            )}
+
+            {/* Tab 3: Username & Password Signup */}
+            {authTab === 'register' && (
+              <form onSubmit={handleRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Username</label>
+                  <input
+                    type="text"
+                    placeholder="Choose username"
+                    value={registerUsername}
+                    onChange={(e) => setRegisterUsername(e.target.value)}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--border-glass)',
+                      borderRadius: '8px', padding: '12px 14px', color: '#fff', fontSize: '14px', outline: 'none'
+                    }}
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Password</label>
+                  <input
+                    type="password"
+                    placeholder="Choose secure password"
+                    value={registerPassword}
+                    onChange={(e) => setRegisterPassword(e.target.value)}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.2)', border: '1px solid var(--border-glass)',
+                      borderRadius: '8px', padding: '12px 14px', color: '#fff', fontSize: '14px', outline: 'none'
+                    }}
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ width: '100%', padding: '12px', fontWeight: 'bold', marginTop: '10px' }}
+                >
+                  🚀 Register Account
+                </button>
+              </form>
+            )}
           </div>
         </div>
       </div>
@@ -1029,6 +1186,11 @@ function App() {
             </button>
           )}
           {location.pathname === '/settings' && (
+            <button className="btn btn-secondary" onClick={() => navigate('/')}>
+              ◀ Back to Home
+            </button>
+          )}
+          {location.pathname === '/club' && (
             <button className="btn btn-secondary" onClick={() => navigate('/')}>
               ◀ Back to Home
             </button>
@@ -1070,6 +1232,15 @@ function App() {
                   }}
                 >
                   ⚙️ View Profile
+                </button>
+                <button 
+                  className="dropdown-item"
+                  onClick={() => {
+                    navigate('/club');
+                    setShowProfileDropdown(false);
+                  }}
+                >
+                  🛡️ Club & Forums
                 </button>
                 <div className="dropdown-divider"></div>
                 <div className="dropdown-title">Session</div>
@@ -1784,6 +1955,7 @@ function App() {
           </div>
         </div>
         } />
+        <Route path="/club" element={<ClubDashboard me={me} setMe={setMe} />} />
         <Route path="/stats" element={
         <StatsDashboard
           matches={matches}
@@ -1907,6 +2079,18 @@ function App() {
                 <div className="menu-card-details">
                   <h3>Stats Dashboard</h3>
                   <p>View game statistics, win rates, brawler performance, and more.</p>
+                </div>
+              </button>
+              
+              <button 
+                className="menu-card btn-enter-draft club-dashboard-btn" 
+                onClick={() => navigate('/club')}
+                style={{ width: '100%', marginTop: '10px' }}
+              >
+                <div className="menu-card-icon">🛡️</div>
+                <div className="menu-card-details">
+                  <h3>Club & Forum</h3>
+                  <p>Coordinate with your club, check member stats, and post in the forums.</p>
                 </div>
               </button>
           </div>

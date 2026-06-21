@@ -311,5 +311,184 @@ export const api = {
       throw new Error(errData.error || 'Failed to access player profile');
     }
     return res.json();
+  },
+
+  // Fetch user's club status
+  async fetchMyClub() {
+    const res = await fetch(`${API_BASE_URL}/clubs/my_club/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch club status');
+    return res.json();
+  },
+
+  // Fetch list of all clubs
+  async fetchClubs() {
+    const res = await fetch(`${API_BASE_URL}/clubs/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch clubs');
+    return res.json();
+  },
+
+  // Create a club
+  async createClub(payload) {
+    const res = await fetch(`${API_BASE_URL}/clubs/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to create club');
+    }
+    return res.json();
+  },
+
+  // Request to join a club
+  async requestJoinClub(clubId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/request_join/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to request join');
+    }
+    return res.json();
+  },
+
+  // Leave club
+  async leaveClub(clubId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/leave/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to leave club');
+    }
+    return res.json();
+  },
+
+  // Approve club member
+  async approveClubMember(clubId, playerId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/approve_member/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ player_id: playerId })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to approve member');
+    }
+    return res.json();
+  },
+
+  // Reject or remove member
+  async rejectOrRemoveClubMember(clubId, playerId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/reject_or_remove_member/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ player_id: playerId })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to remove member');
+    }
+    return res.json();
+  },
+
+  // Change member role
+  async changeClubMemberRole(clubId, playerId, role) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/change_member_role/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ player_id: playerId, role: role })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to change role');
+    }
+    return res.json();
+  },
+
+  // FORUM: Fetch categories
+  async fetchForumCategories() {
+    const res = await fetch(`${API_BASE_URL}/forum/categories/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch forum categories');
+    return res.json();
+  },
+
+  // FORUM: Fetch threads in a category
+  async fetchForumThreads(categoryId) {
+    let url = `${API_BASE_URL}/forum/threads/`;
+    if (categoryId) url += `?category=${categoryId}`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch forum threads');
+    return res.json();
+  },
+
+  // FORUM: Create a thread
+  async createForumThread(payload) {
+    const res = await fetch(`${API_BASE_URL}/forum/threads/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to create thread');
+    }
+    return res.json();
+  },
+
+  // FORUM: Delete a thread
+  async deleteForumThread(threadId) {
+    const res = await fetch(`${API_BASE_URL}/forum/threads/${threadId}/`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to delete thread');
+    return true;
+  },
+
+  // FORUM: Fetch replies for a thread
+  async fetchForumReplies(threadId) {
+    let url = `${API_BASE_URL}/forum/replies/`;
+    if (threadId) url += `?thread=${threadId}`;
+    const res = await fetch(url, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch replies');
+    return res.json();
+  },
+
+  // FORUM: Create a reply
+  async createForumReply(payload) {
+    const res = await fetch(`${API_BASE_URL}/forum/replies/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to post reply');
+    }
+    return res.json();
+  },
+
+  // FORUM: Delete a reply
+  async deleteForumReply(replyId) {
+    const res = await fetch(`${API_BASE_URL}/forum/replies/${replyId}/`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to delete reply');
+    return true;
   }
 };

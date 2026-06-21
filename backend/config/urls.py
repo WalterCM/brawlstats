@@ -23,4 +23,5 @@ urlpatterns = [
     path('api/', include('apps.matches.urls')),
     path('api/', include('apps.drafting.urls')),
     path('api/', include('apps.brawlers.urls')),
+    path('api/', include('apps.clubs.urls')),
 ]
