@@ -562,16 +562,19 @@ class ClubViewSet(viewsets.ModelViewSet):
             )
 
         from django.contrib.auth.models import User
-        all_users = User.objects.all().order_by('username')
+        # Exclude test accounts from linkage options
+        test_usernames = ['brawler', 'tester123', 'testuser', 'testuser123']
+        all_users = User.objects.exclude(username__in=test_usernames).order_by('username')
         
         unlinked_users = []
         for u in all_users:
             auth_id = f"django-user-{u.id}"
             player_linked = Player.objects.filter(supabase_auth_id=auth_id).exclude(player_tag='').exclude(player_tag__isnull=True).exists()
             if not player_linked:
+                # If they have an email, we show the email or username
                 unlinked_users.append({
                     'id': u.id,
-                    'username': u.username
+                    'username': u.email or u.username
                 })
 
         club_members = ClubMember.objects.filter(club=club, is_active=True)

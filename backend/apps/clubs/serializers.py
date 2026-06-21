@@ -6,15 +6,59 @@ class ClubMemberSerializer(serializers.ModelSerializer):
     player_name = serializers.CharField(source='player.name', read_only=True)
     player_tag = serializers.CharField(source='player.player_tag', read_only=True)
     avatar_id = serializers.IntegerField(source='player.avatar_id', read_only=True)
+    is_linked = serializers.SerializerMethodField()
+    linked_email = serializers.SerializerMethodField()
 
     class Meta:
         model = ClubMember
         fields = [
             'id', 'club', 'player', 'player_name', 'player_tag', 
             'avatar_id', 'role', 'is_approved', 'is_active', 
-            'joined_at', 'left_at'
+            'joined_at', 'left_at', 'is_linked', 'linked_email'
         ]
         read_only_fields = ['id', 'joined_at', 'left_at']
+
+    def get_is_linked(self, obj):
+        auth_id = obj.player.supabase_auth_id or ''
+        return auth_id.startswith('django-user-')
+
+    def get_linked_email(self, obj):
+        auth_id = obj.player.supabase_auth_id or ''
+        if auth_id.startswith('django-user-'):
+            try:
+                user_id = int(auth_id.replace('django-user-', ''))
+                from django.contrib.auth.models import User
+                target_user = User.objects.get(id=user_id)
+                
+                request = self.context.get('request')
+                if request and request.user and request.user.is_authenticated:
+                    # 1. The user themselves can see their own email
+                    if request.user.id == target_user.id:
+                        return target_user.email
+                    
+                    # 2. Staff/Superusers can see the email
+                    if request.user.is_staff or request.user.is_superuser:
+                        return target_user.email
+                    
+                    # 3. Club President and Vice President can see emails
+                    try:
+                        req_player = getattr(request, 'player', None)
+                        if req_player:
+                            req_membership = ClubMember.objects.filter(
+                                club=obj.club, 
+                                player=req_player, 
+                                is_active=True
+                            ).first()
+                            if req_membership and req_membership.role in ['president', 'vice_president']:
+                                return target_user.email
+                    except Exception:
+                        pass
+                
+                # Default fallback: mask email to ensure privacy
+                return "Verificado"
+            except (ValueError, User.DoesNotExist):
+                return None
+        return None
 
 class ClubSerializer(serializers.ModelSerializer):
     members = ClubMemberSerializer(many=True, read_only=True)

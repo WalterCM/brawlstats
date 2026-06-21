@@ -15,14 +15,23 @@ class UserLoginView(views.APIView):
         password = request.data.get('password')
         if not username or not password:
             return response.Response(
-                {'error': 'Username and password are required.'},
+                {'error': 'Username/Email and password are required.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        user = authenticate(username=username, password=password)
+        # Support hybrid login by username or email
+        from django.db.models import Q
+        user_obj = User.objects.filter(Q(username__iexact=username) | Q(email__iexact=username)).first()
+        if not user_obj:
+            return response.Response(
+                {'error': 'Invalid username/email or password.'},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+            
+        user = authenticate(username=user_obj.username, password=password)
         if not user:
             return response.Response(
-                {'error': 'Invalid username or password.'},
+                {'error': 'Invalid username/email or password.'},
                 status=status.HTTP_401_UNAUTHORIZED
             )
             
@@ -36,26 +45,26 @@ class UserRegisterView(views.APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        username = request.data.get('username')
+        email = request.data.get('email') or request.data.get('username')
         password = request.data.get('password')
-        if not username or not password:
+        if not email or not password:
             return response.Response(
-                {'error': 'Username and password are required.'},
+                {'error': 'Email and password are required.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        if User.objects.filter(username=username).exists():
+        if User.objects.filter(username__iexact=email).exists() or User.objects.filter(email__iexact=email).exists():
             return response.Response(
-                {'error': 'Username is already taken.'},
+                {'error': 'Email is already registered.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        user = User.objects.create_user(username=username, password=password)
+        user = User.objects.create_user(username=email, email=email, password=password)
         
-        # Create Player model instance mapped to the user
+        temp_name = email.split('@')[0] if '@' in email else email
         Player.objects.create(
             supabase_auth_id=f"django-user-{user.id}",
-            name=user.username
+            name=temp_name
         )
         
         token = Token.objects.create(user=user)

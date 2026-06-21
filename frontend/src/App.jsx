@@ -1077,10 +1077,10 @@ function App() {
             {authTab === 'login' && (
               <form onSubmit={handleLoginSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Username</label>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Username / Email</label>
                   <input
                     type="text"
-                    placeholder="Enter username"
+                    placeholder="Enter username or email"
                     value={loginUsername}
                     onChange={(e) => setLoginUsername(e.target.value)}
                     style={{
@@ -1114,14 +1114,14 @@ function App() {
               </form>
             )}
 
-            {/* Tab 3: Username & Password Signup */}
+            {/* Tab 3: Email & Password Signup */}
             {authTab === 'register' && (
               <form onSubmit={handleRegisterSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Username</label>
+                  <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--color-text-muted)', textTransform: 'uppercase' }}>Email Address</label>
                   <input
-                    type="text"
-                    placeholder="Choose username"
+                    type="email"
+                    placeholder="Enter email address"
                     value={registerUsername}
                     onChange={(e) => setRegisterUsername(e.target.value)}
                     style={{

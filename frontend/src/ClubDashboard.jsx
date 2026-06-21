@@ -26,7 +26,7 @@ export default function ClubDashboard({ me, setMe }) {
   const [unlinkedUsers, setUnlinkedUsers] = useState([]);
   const [unlinkedPlayers, setUnlinkedPlayers] = useState([]);
   const [selectedUserToLink, setSelectedUserToLink] = useState('');
-  const [selectedPlayerToLink, setSelectedPlayerToLink] = useState('');
+  const [linkingPlayerId, setLinkingPlayerId] = useState(null);
   const [syncingRoster, setSyncingRoster] = useState(false);
   const [linkingAccount, setLinkingAccount] = useState(false);
 
@@ -122,9 +122,8 @@ export default function ClubDashboard({ me, setMe }) {
     }
   };
 
-  const handleLinkAccount = async (e) => {
-    e.preventDefault();
-    if (!clubStatus.club || !selectedUserToLink || !selectedPlayerToLink) return;
+  const handleLinkPlayerInline = async (playerId) => {
+    if (!clubStatus.club || !selectedUserToLink) return;
     setLinkingAccount(true);
     setError('');
     setSuccess('');
@@ -132,11 +131,11 @@ export default function ClubDashboard({ me, setMe }) {
       const res = await api.linkClubPlayer(
         clubStatus.club.id,
         selectedUserToLink,
-        selectedPlayerToLink
+        playerId
       );
       setSuccess(res.message || 'Account linked successfully!');
       setSelectedUserToLink('');
-      setSelectedPlayerToLink('');
+      setLinkingPlayerId(null);
       await loadClubData();
     } catch (err) {
       setError(err.message || 'Failed to link account.');
@@ -560,38 +559,71 @@ export default function ClubDashboard({ me, setMe }) {
             </div>
             <div className="roster-list">
               {approvedMembers.map(member => (
-                <div key={member.id} className="roster-item">
-                  {member.avatar_id ? (
-                    <img 
-                      src={`https://cdn.brawlify.com/profile-icons/regular/${member.avatar_id}.png`} 
-                      alt="" 
-                      className="roster-avatar"
-                    />
-                  ) : (
-                    <div className="roster-avatar-fallback">👤</div>
-                  )}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div className="roster-name">{member.player_name}</div>
-                    <div className="roster-tag">
-                      {member.player_tag} • <span className="joined-date-meta" style={{ fontSize: '0.8rem', color: '#aaa' }}>Desde {new Date(member.joined_at).toLocaleDateString()}</span>
+                <div key={member.id} className="roster-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                    {member.avatar_id ? (
+                      <img 
+                        src={`https://cdn.brawlify.com/profile-icons/regular/${member.avatar_id}.png`} 
+                        alt="" 
+                        className="roster-avatar"
+                      />
+                    ) : (
+                      <div className="roster-avatar-fallback">👤</div>
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="roster-name" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <span>{member.player_name}</span>
+                        {member.is_linked ? (
+                          <span className="linked-badge" style={{ background: 'rgba(46, 204, 113, 0.15)', color: '#2ecc71', fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(46, 204, 113, 0.4)', fontWeight: 'bold' }}>
+                            🔗 {member.linked_email}
+                          </span>
+                        ) : (
+                          (isPresident || isVP || me.is_admin) && (
+                            <button 
+                              onClick={() => {
+                                setLinkingPlayerId(linkingPlayerId === member.player ? null : member.player);
+                                setSelectedUserToLink('');
+                              }}
+                              className="btn btn-sm" 
+                              style={{ padding: '2px 6px', fontSize: '0.75rem', background: '#222', border: '1px solid #444', borderRadius: '4px', cursor: 'pointer', color: '#3498db' }}
+                            >
+                              🔗 Enlazar Cuenta
+                            </button>
+                          )
+                        )}
+                      </div>
+                      <div className="roster-tag">
+                        {member.player_tag} • <span className="joined-date-meta" style={{ fontSize: '0.8rem', color: '#aaa' }}>Desde {new Date(member.joined_at).toLocaleDateString()}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span className={`role-badge ${member.role}`}>{member.role}</span>
-                    
-                    {/* President Controls */}
-                    {isPresident && member.player !== me.id && (
-                      <div className="admin-actions">
-                        <select 
-                          value={member.role} 
-                          onChange={(e) => handleChangeRole(member.player, e.target.value)}
-                          className="role-select"
-                        >
-                          <option value="president">Transfer President</option>
-                          <option value="vice_president">Vice President</option>
-                          <option value="senior">Senior</option>
-                          <option value="member">Member</option>
-                        </select>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span className={`role-badge ${member.role}`}>{member.role}</span>
+                      
+                      {/* President Controls */}
+                      {isPresident && member.player !== me.id && (
+                        <div className="admin-actions">
+                          <select 
+                            value={member.role} 
+                            onChange={(e) => handleChangeRole(member.player, e.target.value)}
+                            className="role-select"
+                          >
+                            <option value="president">Transfer President</option>
+                            <option value="vice_president">Vice President</option>
+                            <option value="senior">Senior</option>
+                            <option value="member">Member</option>
+                          </select>
+                          <button 
+                            onClick={() => handleRemoveMember(member.player, member.player_name)}
+                            className="btn btn-sm btn-danger-text"
+                            title="Kick Member"
+                          >
+                            Kick
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Vice President Controls (Can only kick seniors and members) */}
+                      {isVP && member.player !== me.id && member.role !== 'president' && member.role !== 'vice_president' && (
                         <button 
                           onClick={() => handleRemoveMember(member.player, member.player_name)}
                           className="btn btn-sm btn-danger-text"
@@ -599,20 +631,50 @@ export default function ClubDashboard({ me, setMe }) {
                         >
                           Kick
                         </button>
-                      </div>
-                    )}
-
-                    {/* Vice President Controls (Can only kick seniors and members) */}
-                    {isVP && member.player !== me.id && member.role !== 'president' && member.role !== 'vice_president' && (
-                      <button 
-                        onClick={() => handleRemoveMember(member.player, member.player_name)}
-                        className="btn btn-sm btn-danger-text"
-                        title="Kick Member"
-                      >
-                        Kick
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
+
+                  {/* Inline Link Form for this specific member */}
+                  {linkingPlayerId === member.player && (
+                    <div className="inline-link-form" style={{ marginTop: '10px', background: 'rgba(0, 0, 0, 0.3)', padding: '12px', borderRadius: '6px', border: '1px solid #333' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#ccc', display: 'block', marginBottom: '6px' }}>Vincular cuenta web registrada a {member.player_name}:</label>
+                      {unlinkedUsers.length === 0 ? (
+                        <p style={{ fontSize: '0.8rem', color: '#ff6b6b', margin: '0' }}>No hay cuentas web registradas pendientes de enlace.</p>
+                      ) : (
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <select 
+                            value={selectedUserToLink}
+                            onChange={(e) => setSelectedUserToLink(e.target.value)}
+                            style={{ padding: '8px', borderRadius: '4px', background: '#1c1c1e', border: '1px solid #444', color: '#fff', fontSize: '0.85rem', flex: 1 }}
+                          >
+                            <option value="">-- Seleccionar Cuenta / Email --</option>
+                            {unlinkedUsers.map(u => (
+                              <option key={u.id} value={u.id}>{u.username}</option>
+                            ))}
+                          </select>
+                          <button 
+                            onClick={() => handleLinkPlayerInline(member.player)}
+                            disabled={!selectedUserToLink || linkingAccount}
+                            className="btn btn-primary btn-sm"
+                            style={{ padding: '8px 16px', fontSize: '0.8rem' }}
+                          >
+                            {linkingAccount ? 'Enlazando...' : 'Confirmar'}
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setLinkingPlayerId(null);
+                              setSelectedUserToLink('');
+                            }}
+                            className="btn btn-secondary btn-sm"
+                            style={{ padding: '8px 12px', fontSize: '0.8rem' }}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
 
@@ -684,67 +746,6 @@ export default function ClubDashboard({ me, setMe }) {
                 </div>
               )}
             </div>
-
-            {/* Manual Account Linkage Panel */}
-            {(isPresident || isVP || me.is_admin) && (
-              <div className="glass-panel club-panel-section">
-                <h2>🔗 Enlazar Cuenta Web a Roster</h2>
-                <p style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '15px' }}>
-                  Asocia una cuenta web registrada con el perfil real de un jugador en Brawl Stars.
-                </p>
-
-                {unlinkedUsers.length === 0 ? (
-                  <div className="empty-state" style={{ padding: '10px' }}>
-                    <p style={{ fontSize: '0.85rem' }}>No hay usuarios web registrados pendientes de vincular.</p>
-                  </div>
-                ) : unlinkedPlayers.length === 0 ? (
-                  <div className="empty-state" style={{ padding: '10px' }}>
-                    <p style={{ fontSize: '0.85rem' }}>Todos los jugadores importados ya tienen cuentas vinculadas.</p>
-                  </div>
-                ) : (
-                  <form onSubmit={handleLinkAccount} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div>
-                      <label style={{ fontSize: '0.8rem', color: '#ccc', display: 'block', marginBottom: '4px' }}>Usuario Web Registrado</label>
-                      <select 
-                        value={selectedUserToLink}
-                        onChange={(e) => setSelectedUserToLink(e.target.value)}
-                        required
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#1c1c1e', border: '1px solid #333', color: '#fff' }}
-                      >
-                        <option value="">-- Seleccionar Usuario --</option>
-                        {unlinkedUsers.map(u => (
-                          <option key={u.id} value={u.id}>{u.username} (ID: {u.id})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div>
-                      <label style={{ fontSize: '0.8rem', color: '#ccc', display: 'block', marginBottom: '4px' }}>Jugador Importado (Brawl Stars)</label>
-                      <select 
-                        value={selectedPlayerToLink}
-                        onChange={(e) => setSelectedPlayerToLink(e.target.value)}
-                        required
-                        style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#1c1c1e', border: '1px solid #333', color: '#fff' }}
-                      >
-                        <option value="">-- Seleccionar Jugador --</option>
-                        {unlinkedPlayers.map(p => (
-                          <option key={p.id} value={p.id}>{p.name} ({p.tag})</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <button 
-                      type="submit" 
-                      disabled={linkingAccount}
-                      className="btn btn-primary"
-                      style={{ width: '100%', marginTop: '5px' }}
-                    >
-                      {linkingAccount ? 'Vinculando...' : 'Enlazar Cuentas'}
-                    </button>
-                  </form>
-                )}
-              </div>
-            )}
           </div>
         </div>
       )}
