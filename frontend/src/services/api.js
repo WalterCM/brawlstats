@@ -413,6 +413,42 @@ export const api = {
     return res.json();
   },
 
+  // Sync roster with official Brawl Stars API
+  async syncClubRoster(clubId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/sync_roster/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to synchronize club roster');
+    }
+    return res.json();
+  },
+
+  // Fetch unlinked Users and Players
+  async fetchUnlinkedProfiles(clubId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/unlinked_profiles/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch unlinked profiles');
+    return res.json();
+  },
+
+  // Link Django user with synced Player profile
+  async linkClubPlayer(clubId, userId, playerId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/link_player/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ user_id: userId, player_id: playerId })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to link account to player profile');
+    }
+    return res.json();
+  },
+
   // FORUM: Fetch categories
   async fetchForumCategories() {
     const res = await fetch(`${API_BASE_URL}/forum/categories/`, {

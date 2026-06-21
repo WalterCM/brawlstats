@@ -9,8 +9,12 @@ class ClubMemberSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ClubMember
-        fields = ['id', 'club', 'player', 'player_name', 'player_tag', 'avatar_id', 'role', 'is_approved', 'joined_at']
-        read_only_fields = ['id', 'joined_at']
+        fields = [
+            'id', 'club', 'player', 'player_name', 'player_tag', 
+            'avatar_id', 'role', 'is_approved', 'is_active', 
+            'joined_at', 'left_at'
+        ]
+        read_only_fields = ['id', 'joined_at', 'left_at']
 
 class ClubSerializer(serializers.ModelSerializer):
     members = ClubMemberSerializer(many=True, read_only=True)
@@ -22,7 +26,7 @@ class ClubSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at']
 
     def get_members_count(self, obj):
-        return obj.members.filter(is_approved=True).count()
+        return obj.members.filter(is_approved=True, is_active=True).count()
 
 class ForumCategorySerializer(serializers.ModelSerializer):
     threads_count = serializers.SerializerMethodField()

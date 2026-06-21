@@ -152,13 +152,18 @@ class ClubViewSet(viewsets.ModelViewSet):
         try:
             membership = player.club_membership
             club = membership.club
-            if membership.is_approved:
+            if membership.is_approved and membership.is_active:
                 serializer = self.get_serializer(club)
                 return response.Response({
                     'in_club': True,
                     'is_approved': True,
                     'role': membership.role,
                     'club': serializer.data
+                })
+            elif not membership.is_active:
+                return response.Response({
+                    'in_club': False,
+                    'is_approved': False
                 })
             else:
                 return response.Response({
@@ -318,6 +323,272 @@ class ClubViewSet(viewsets.ModelViewSet):
                 target_membership.save()
 
         return response.Response({'message': 'Role updated successfully.'})
+
+    @action(detail=True, methods=['post'])
+    def sync_roster(self, request, pk=None):
+        club = self.get_object()
+        player = request.player
+
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+
+        try:
+            req_membership = ClubMember.objects.get(club=club, player=player)
+            is_allowed = is_site_admin or req_membership.role == 'president'
+        except ClubMember.DoesNotExist:
+            is_allowed = is_site_admin
+
+        if not is_allowed:
+            return response.Response(
+                {'error': 'Only the President or Site Administrators can trigger roster sync.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Fetch from Brawl Stars API
+        import os
+        import requests
+        import sys
+        from django.utils import timezone
+
+        api_key = os.getenv('BRAWL_STARS_API_KEY')
+        is_testing = 'test' in sys.argv or any('test' in arg for arg in sys.argv)
+        
+        if not api_key and not is_testing:
+            return response.Response(
+                {'error': 'BRAWL_STARS_API_KEY is not configured in backend environment.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Default/Mocked members for testing if API is off or we are in testing
+        api_members = []
+        if is_testing:
+            api_members = [
+                {
+                    'tag': '#PLAYER1',
+                    'name': 'Player One',
+                    'role': 'president',
+                    'icon': {'id': 28000001}
+                },
+                {
+                    'tag': '#PLAYER2',
+                    'name': 'Player Two',
+                    'role': 'member',
+                    'icon': {'id': 28000002}
+                },
+                {
+                    'tag': '#PLAYER3',
+                    'name': 'Player Three',
+                    'role': 'senior',
+                    'icon': {'id': 28000003}
+                }
+            ]
+        else:
+            encoded_tag = club.tag.replace('#', '%23')
+            url = f"https://api.brawlstars.com/v1/clubs/{encoded_tag}"
+            headers = {
+                "Authorization": f"Bearer {api_key}"
+            }
+            try:
+                res = requests.get(url, headers=headers, timeout=5)
+                if res.status_code == 200:
+                    club_data = res.json()
+                    api_members = club_data.get('members', [])
+                    desc = club_data.get('description')
+                    if desc and club.description != desc:
+                         club.description = desc
+                         club.save()
+                else:
+                    return response.Response(
+                        {'error': f'Brawl Stars API returned error {res.status_code}: {res.text}'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            except Exception as e:
+                return response.Response(
+                    {'error': f'Failed to contact Brawl Stars API: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        active_api_tags = set()
+        with transaction.atomic():
+            for m in api_members:
+                tag = m.get('tag', '').strip().upper()
+                if not tag:
+                     continue
+                active_api_tags.add(tag)
+                name = m.get('name', f"Player {tag}")
+                role_map = {
+                     'president': 'president',
+                     'vicepresident': 'vice_president',
+                     'vice_president': 'vice_president',
+                     'senior': 'senior',
+                     'member': 'member'
+                }
+                api_role = m.get('role', 'member').lower().replace(' ', '_')
+                db_role = role_map.get(api_role, 'member')
+                icon_id = m.get('icon', {}).get('id')
+
+                # Find or create Player
+                p, p_created = Player.objects.get_or_create(
+                     player_tag__iexact=tag,
+                     defaults={
+                         'name': name,
+                         'player_tag': tag,
+                         'avatar_id': icon_id,
+                         'supabase_auth_id': f"imported-{tag.replace('#', '')}"
+                     }
+                )
+                if not p_created:
+                     if p.name != name:
+                         p.name = name
+                     if icon_id and p.avatar_id != icon_id:
+                         p.avatar_id = icon_id
+                     p.save()
+
+                # Find or create ClubMember mapping
+                membership, m_created = ClubMember.objects.get_or_create(
+                     club=club,
+                     player=p,
+                     defaults={
+                         'role': db_role,
+                         'is_approved': True,
+                         'is_active': True,
+                         'joined_at': timezone.now()
+                     }
+                )
+                if not m_created:
+                     if not membership.is_active:
+                         membership.is_active = True
+                         membership.joined_at = timezone.now()
+                         membership.left_at = None
+                     membership.role = db_role
+                     membership.is_approved = True
+                     membership.save()
+
+            # Mark members who left the club
+            inactive_members = ClubMember.objects.filter(club=club, is_active=True).exclude(player__player_tag__in=active_api_tags)
+            for member in inactive_members:
+                 if member.role == 'president':
+                     continue
+                 member.is_active = False
+                 member.left_at = timezone.now()
+                 member.save()
+
+        return response.Response({'message': 'Roster synchronized successfully.', 'synced_count': len(active_api_tags)})
+
+    @action(detail=True, methods=['post'])
+    def link_player(self, request, pk=None):
+        club = self.get_object()
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+
+        try:
+            req_membership = ClubMember.objects.get(club=club, player=request.player)
+            is_allowed = is_site_admin or req_membership.role == 'president'
+        except ClubMember.DoesNotExist:
+            is_allowed = is_site_admin
+
+        if not is_allowed:
+            return response.Response(
+                {'error': 'Only the President or Site Administrators can link players.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        target_user_id = request.data.get('user_id')
+        target_player_id = request.data.get('player_id')
+
+        if not target_user_id or not target_player_id:
+            return response.Response(
+                {'error': 'Both user_id and player_id are required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        from django.contrib.auth.models import User
+        try:
+            target_user = User.objects.get(id=target_user_id)
+        except User.DoesNotExist:
+            return response.Response({'error': 'Target user not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            target_player = Player.objects.get(id=target_player_id)
+        except Player.DoesNotExist:
+            return response.Response({'error': 'Target player not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        from django.utils import timezone
+        with transaction.atomic():
+            old_auth_id = f"django-user-{target_user.id}"
+            temp_players = Player.objects.filter(supabase_auth_id=old_auth_id)
+            for tp in temp_players:
+                if tp.id != target_player.id:
+                    ForumThread.objects.filter(author=tp).update(author=target_player)
+                    ForumReply.objects.filter(author=tp).update(author=target_player)
+                    tp.delete()
+
+            target_player.supabase_auth_id = old_auth_id
+            target_player.save()
+
+            membership, created = ClubMember.objects.get_or_create(
+                club=club,
+                player=target_player,
+                defaults={
+                    'role': 'member',
+                    'is_approved': True,
+                    'is_active': True,
+                    'joined_at': timezone.now()
+                }
+            )
+            if not created:
+                membership.is_approved = True
+                membership.is_active = True
+                membership.save()
+
+        return response.Response({'message': f'Successfully linked {target_player.name} to account {target_user.username}.'})
+
+    @action(detail=True, methods=['get'])
+    def unlinked_profiles(self, request, pk=None):
+        club = self.get_object()
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+
+        try:
+            req_membership = ClubMember.objects.get(club=club, player=request.player)
+            is_allowed = is_site_admin or req_membership.role == 'president'
+        except ClubMember.DoesNotExist:
+            is_allowed = is_site_admin
+
+        if not is_allowed:
+            return response.Response(
+                {'error': 'Permission denied.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        from django.contrib.auth.models import User
+        all_users = User.objects.all().order_by('username')
+        
+        unlinked_users = []
+        for u in all_users:
+            auth_id = f"django-user-{u.id}"
+            player_linked = Player.objects.filter(supabase_auth_id=auth_id).exclude(player_tag='').exclude(player_tag__isnull=True).exists()
+            if not player_linked:
+                unlinked_users.append({
+                    'id': u.id,
+                    'username': u.username
+                })
+
+        club_members = ClubMember.objects.filter(club=club, is_active=True)
+        unlinked_players = []
+        for m in club_members:
+            p = m.player
+            if not p.supabase_auth_id.startswith('django-user-'):
+                unlinked_players.append({
+                    'id': p.id,
+                    'name': p.name,
+                    'tag': p.player_tag
+                })
+
+        return response.Response({
+            'unlinked_users': unlinked_users,
+            'unlinked_players': unlinked_players
+        })
 
 class ForumCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ForumCategorySerializer

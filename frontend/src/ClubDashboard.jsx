@@ -22,6 +22,14 @@ export default function ClubDashboard({ me, setMe }) {
   const [tempPlayerTag, setTempPlayerTag] = useState('');
   const [updatingTag, setUpdatingTag] = useState(false);
 
+  // Phase 1 States
+  const [unlinkedUsers, setUnlinkedUsers] = useState([]);
+  const [unlinkedPlayers, setUnlinkedPlayers] = useState([]);
+  const [selectedUserToLink, setSelectedUserToLink] = useState('');
+  const [selectedPlayerToLink, setSelectedPlayerToLink] = useState('');
+  const [syncingRoster, setSyncingRoster] = useState(false);
+  const [linkingAccount, setLinkingAccount] = useState(false);
+
   // Tabs
   const [activeTab, setActiveTab] = useState('forum'); // 'members', 'forum', 'settings'
 
@@ -42,6 +50,16 @@ export default function ClubDashboard({ me, setMe }) {
   useEffect(() => {
     loadClubData();
   }, [me]);
+
+  const loadUnlinkedProfiles = async (clubId) => {
+    try {
+      const res = await api.fetchUnlinkedProfiles(clubId);
+      setUnlinkedUsers(res.unlinked_users || []);
+      setUnlinkedPlayers(res.unlinked_players || []);
+    } catch (err) {
+      console.error('Failed to load unlinked profiles:', err);
+    }
+  };
 
   const loadClubData = async () => {
     setLoading(true);
@@ -72,12 +90,58 @@ export default function ClubDashboard({ me, setMe }) {
           setSelectedCategory(catList[0]);
           loadThreads(catList[0].id);
         }
+
+        // Load unlinked profiles for mapping if President/VP
+        const isPres = statusRes.role === 'president';
+        const isVice = statusRes.role === 'vice_president';
+        if (isPres || isVice || me.is_admin) {
+          await loadUnlinkedProfiles(statusRes.club.id);
+        }
       }
     } catch (err) {
       console.error(err);
       setError('Failed to load club data.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSyncRoster = async () => {
+    if (!clubStatus.club) return;
+    setSyncingRoster(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await api.syncClubRoster(clubStatus.club.id);
+      setSuccess(`Roster synchronized successfully! Sync details processed.`);
+      await loadClubData();
+    } catch (err) {
+      setError(err.message || 'Failed to sync roster.');
+    } finally {
+      setSyncingRoster(false);
+    }
+  };
+
+  const handleLinkAccount = async (e) => {
+    e.preventDefault();
+    if (!clubStatus.club || !selectedUserToLink || !selectedPlayerToLink) return;
+    setLinkingAccount(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await api.linkClubPlayer(
+        clubStatus.club.id,
+        selectedUserToLink,
+        selectedPlayerToLink
+      );
+      setSuccess(res.message || 'Account linked successfully!');
+      setSelectedUserToLink('');
+      setSelectedPlayerToLink('');
+      await loadClubData();
+    } catch (err) {
+      setError(err.message || 'Failed to link account.');
+    } finally {
+      setLinkingAccount(false);
     }
   };
 
@@ -432,8 +496,9 @@ export default function ClubDashboard({ me, setMe }) {
 
   // Case 3: APPROVED MEMBER of a club
   const club = clubStatus.club;
-  const approvedMembers = club.members.filter(m => m.is_approved);
+  const approvedMembers = club.members.filter(m => m.is_approved && m.is_active);
   const pendingMembers = club.members.filter(m => !m.is_approved);
+  const inactiveMembers = club.members.filter(m => m.is_approved && !m.is_active);
 
   return (
     <div className="club-page-wrapper">
@@ -480,7 +545,19 @@ export default function ClubDashboard({ me, setMe }) {
         <div className="club-members-grid">
           {/* Approved Members List */}
           <div className="glass-panel club-panel-section">
-            <h2>👥 Club Roster</h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <h2>👥 Club Roster</h2>
+              {isPresident && (
+                <button 
+                  onClick={handleSyncRoster} 
+                  disabled={syncingRoster}
+                  className="btn btn-primary btn-sm"
+                  style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+                >
+                  🔄 {syncingRoster ? 'Sincronizando...' : 'Sincronizar Roster'}
+                </button>
+              )}
+            </div>
             <div className="roster-list">
               {approvedMembers.map(member => (
                 <div key={member.id} className="roster-item">
@@ -495,7 +572,9 @@ export default function ClubDashboard({ me, setMe }) {
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="roster-name">{member.player_name}</div>
-                    <div className="roster-tag">{member.player_tag}</div>
+                    <div className="roster-tag">
+                      {member.player_tag} • <span className="joined-date-meta" style={{ fontSize: '0.8rem', color: '#aaa' }}>Desde {new Date(member.joined_at).toLocaleDateString()}</span>
+                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className={`role-badge ${member.role}`}>{member.role}</span>
@@ -536,46 +615,134 @@ export default function ClubDashboard({ me, setMe }) {
                   </div>
                 </div>
               ))}
+
+              {inactiveMembers.length > 0 && (
+                <>
+                  <h3 style={{ marginTop: '25px', marginBottom: '10px', fontSize: '1rem', color: '#ff6b6b', borderBottom: '1px solid #333', paddingBottom: '5px' }}>🚪 Historial de Salidas / Ex-miembros</h3>
+                  {inactiveMembers.map(member => (
+                    <div key={member.id} className="roster-item" style={{ opacity: 0.55 }}>
+                      {member.avatar_id ? (
+                        <img 
+                          src={`https://cdn.brawlify.com/profile-icons/regular/${member.avatar_id}.png`} 
+                          alt="" 
+                          className="roster-avatar"
+                        />
+                      ) : (
+                        <div className="roster-avatar-fallback">👤</div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="roster-name">{member.player_name} <span style={{ fontSize: '0.75rem', background: '#333', padding: '1px 5px', borderRadius: '3px', marginLeft: '5px' }}>SALIDO</span></div>
+                        <div className="roster-tag">
+                          {member.player_tag} • <span className="joined-date-meta" style={{ fontSize: '0.8rem' }}>Estuvo: {new Date(member.joined_at).toLocaleDateString()} - {member.left_at ? new Date(member.left_at).toLocaleDateString() : 'N/A'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </div>
 
-          {/* Pending Members List (Visible to Admins) */}
-          <div className="glass-panel club-panel-section">
-            <h2>📥 Pending Approval Requests</h2>
-            {pendingMembers.length === 0 ? (
-              <div className="empty-state">
-                <p>No pending join requests.</p>
-              </div>
-            ) : (
-              <div className="roster-list">
-                {pendingMembers.map(member => (
-                  <div key={member.id} className="roster-item">
-                    <div style={{ flex: 1 }}>
-                      <div className="roster-name">{member.player_name}</div>
-                      <div className="roster-tag">{member.player_tag}</div>
+          {/* Pending Members List & Account Linking Panel */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="glass-panel club-panel-section">
+              <h2>📥 Pending Approval Requests</h2>
+              {pendingMembers.length === 0 ? (
+                <div className="empty-state">
+                  <p>No pending join requests.</p>
+                </div>
+              ) : (
+                <div className="roster-list">
+                  {pendingMembers.map(member => (
+                    <div key={member.id} className="roster-item">
+                      <div style={{ flex: 1 }}>
+                        <div className="roster-name">{member.player_name}</div>
+                        <div className="roster-tag">{member.player_tag}</div>
+                      </div>
+                      <div>
+                        {isAdmin ? (
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button 
+                              onClick={() => handleApproveMember(member.player)}
+                              className="btn btn-sm btn-primary"
+                            >
+                              Approve
+                            </button>
+                            <button 
+                              onClick={() => handleRemoveMember(member.player, member.player_name)}
+                              className="btn btn-sm btn-danger"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="pending-label">Pending</span>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      {isAdmin ? (
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          <button 
-                            onClick={() => handleApproveMember(member.player)}
-                            className="btn btn-sm btn-primary"
-                          >
-                            Approve
-                          </button>
-                          <button 
-                            onClick={() => handleRemoveMember(member.player, member.player_name)}
-                            className="btn btn-sm btn-danger"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="pending-label">Pending</span>
-                      )}
-                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Manual Account Linkage Panel */}
+            {(isPresident || isVP || me.is_admin) && (
+              <div className="glass-panel club-panel-section">
+                <h2>🔗 Enlazar Cuenta Web a Roster</h2>
+                <p style={{ fontSize: '0.8rem', color: '#aaa', marginBottom: '15px' }}>
+                  Asocia una cuenta web registrada con el perfil real de un jugador en Brawl Stars.
+                </p>
+
+                {unlinkedUsers.length === 0 ? (
+                  <div className="empty-state" style={{ padding: '10px' }}>
+                    <p style={{ fontSize: '0.85rem' }}>No hay usuarios web registrados pendientes de vincular.</p>
                   </div>
-                ))}
+                ) : unlinkedPlayers.length === 0 ? (
+                  <div className="empty-state" style={{ padding: '10px' }}>
+                    <p style={{ fontSize: '0.85rem' }}>Todos los jugadores importados ya tienen cuentas vinculadas.</p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleLinkAccount} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                      <label style={{ fontSize: '0.8rem', color: '#ccc', display: 'block', marginBottom: '4px' }}>Usuario Web Registrado</label>
+                      <select 
+                        value={selectedUserToLink}
+                        onChange={(e) => setSelectedUserToLink(e.target.value)}
+                        required
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#1c1c1e', border: '1px solid #333', color: '#fff' }}
+                      >
+                        <option value="">-- Seleccionar Usuario --</option>
+                        {unlinkedUsers.map(u => (
+                          <option key={u.id} value={u.id}>{u.username} (ID: {u.id})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: '0.8rem', color: '#ccc', display: 'block', marginBottom: '4px' }}>Jugador Importado (Brawl Stars)</label>
+                      <select 
+                        value={selectedPlayerToLink}
+                        onChange={(e) => setSelectedPlayerToLink(e.target.value)}
+                        required
+                        style={{ width: '100%', padding: '8px', borderRadius: '4px', background: '#1c1c1e', border: '1px solid #333', color: '#fff' }}
+                      >
+                        <option value="">-- Seleccionar Jugador --</option>
+                        {unlinkedPlayers.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} ({p.tag})</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <button 
+                      type="submit" 
+                      disabled={linkingAccount}
+                      className="btn btn-primary"
+                      style={{ width: '100%', marginTop: '5px' }}
+                    >
+                      {linkingAccount ? 'Vinculando...' : 'Enlazar Cuentas'}
+                    </button>
+                  </form>
+                )}
               </div>
             )}
           </div>
