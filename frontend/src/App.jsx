@@ -2023,23 +2023,6 @@ function App() {
             view="forum"
           />
         } />
-        <Route path="/club/member/:tag" element={
-          <ClubDashboard 
-            me={me} 
-            setMe={setMe} 
-            brawlers={brawlers}
-            allMaps={allMaps}
-            brawlerMeta={brawlerMeta}
-            matches={matches}
-            setMatches={setMatches}
-            perceptions={perceptions}
-            handleSyncHistory={handleSyncHistory}
-            syncingHistory={syncingHistory}
-            minNormalTrophies={minNormalTrophies}
-            enterDraftMode={enterDraftMode}
-            view="member"
-          />
-        } />
         <Route path="/stats" element={<Navigate to="/" replace />} />
         <Route path="/stats/brawler/:brawlerId" element={
         <BrawlerProfile

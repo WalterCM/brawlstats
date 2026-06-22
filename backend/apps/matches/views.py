@@ -11,26 +11,7 @@ class MatchViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSupabaseAuthenticated]
 
     def get_queryset(self):
-        player = self.request.player
-        player_id = self.request.query_params.get('player_id')
-        player_tag = self.request.query_params.get('player_tag')
-        
-        if player_id or player_tag:
-            from apps.clubs.models import ClubMember
-            try:
-                req_membership = player.club_membership
-                if player_id:
-                    target_member = ClubMember.objects.get(player_id=player_id, club=req_membership.club, is_approved=True)
-                else:
-                    clean_tag = player_tag.strip().upper()
-                    if not clean_tag.startswith('#'):
-                        clean_tag = f"#{clean_tag}"
-                    target_member = ClubMember.objects.get(player__player_tag__iexact=clean_tag, club=req_membership.club, is_approved=True)
-                return Match.objects.filter(player=target_member.player).order_by('-date')
-            except (AttributeError, ClubMember.DoesNotExist):
-                return Match.objects.none()
-        # Filter match history specifically to the authenticated player
-        return Match.objects.filter(player=player).order_by('-date')
+        return Match.objects.filter(player=self.request.player).order_by('-date')
 
     @action(detail=False, methods=['post'], url_path='submit-series')
     def submit_series(self, request):

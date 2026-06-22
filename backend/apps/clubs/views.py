@@ -645,7 +645,7 @@ class ClubViewSet(viewsets.ModelViewSet):
     def stats(self, request, pk=None):
         club = self.get_object()
         player = request.player
-        
+
         user = getattr(request, 'user', None)
         is_site_admin = user and (user.is_staff or user.is_superuser)
         try:
@@ -656,21 +656,28 @@ class ClubViewSet(viewsets.ModelViewSet):
             if not is_site_admin:
                 return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
 
-        member_players = Player.objects.filter(club_membership__club=club, club_membership__is_approved=True, club_membership__is_active=True)
-        
+        member_players = Player.objects.filter(
+            club_membership__club=club, club_membership__is_approved=True,
+            club_membership__is_active=True
+        )
+
         from apps.matches.models import Match
+        from django.db.models import Count, Q, Avg
+        from django.utils import timezone
+        from datetime import timedelta
+
         matches = Match.objects.filter(player__in=member_players)
-        
         total_matches = matches.count()
         victories = matches.filter(result='victory').count()
         overall_win_rate = (victories / total_matches * 100) if total_matches > 0 else 0
-        
-        from django.db.models import Count, Q
+
+        seven_days_ago = timezone.now() - timedelta(days=7)
+
         mode_data = matches.values('mode').annotate(
             played=Count('id'),
             wins=Count('id', filter=Q(result='victory'))
         ).order_by('-played')
-        
+
         modes = []
         for m in mode_data:
             modes.append({
@@ -678,12 +685,12 @@ class ClubViewSet(viewsets.ModelViewSet):
                 'played': m['played'],
                 'win_rate': (m['wins'] / m['played'] * 100) if m['played'] > 0 else 0
             })
-            
+
         brawler_data = matches.values('my_brawler__id', 'my_brawler__name').annotate(
             played=Count('id'),
             wins=Count('id', filter=Q(result='victory'))
         ).order_by('-played')[:5]
-        
+
         brawlers_list = []
         for b in brawler_data:
             if b['my_brawler__id']:
@@ -693,20 +700,43 @@ class ClubViewSet(viewsets.ModelViewSet):
                     'played': b['played'],
                     'win_rate': (b['wins'] / b['played'] * 100) if b['played'] > 0 else 0
                 })
-                
+
         member_stats = matches.values('player__id').annotate(
             played=Count('id'),
-            wins=Count('id', filter=Q(result='victory'))
+            wins=Count('id', filter=Q(result='victory')),
+            star_player=Count('id', filter=Q(is_star_player=True)),
+            avg_trophies=Avg('my_brawler_trophies'),
+            ranked_played=Count('id', filter=Q(draft_type='ranked')),
+            ranked_wins=Count('id', filter=Q(draft_type='ranked', result='victory')),
+            normal_played=Count('id', filter=Q(draft_type='normal')),
+            normal_wins=Count('id', filter=Q(draft_type='normal', result='victory')),
+            recent_played=Count('id', filter=Q(date__gte=seven_days_ago)),
+            recent_wins=Count('id', filter=Q(date__gte=seven_days_ago, result='victory')),
         )
         stats_by_player = {s['player__id']: s for s in member_stats}
-        
+
+        top_brawler_qs = matches.values('player_id', 'my_brawler__name').annotate(
+            cnt=Count('id')
+        ).order_by('player_id', '-cnt')
+        top_brawler_map = {}
+        for row in top_brawler_qs:
+            pid = row['player_id']
+            if pid not in top_brawler_map and row['my_brawler__name']:
+                top_brawler_map[pid] = row['my_brawler__name']
+
+        sort_by = request.query_params.get('sort_by', 'win_rate')
+
         leaderboard = []
         for m_member in club.members.filter(is_approved=True, is_active=True):
             p = m_member.player
-            stat = stats_by_player.get(p.id)
-            played = stat['played'] if stat else 0
-            wins = stat['wins'] if stat else 0
-            win_rate = (wins / played * 100) if played > 0 else 0
+            s = stats_by_player.get(p.id) or {}
+            played = s.get('played', 0) or 0
+            wins = s.get('wins', 0) or 0
+            ranked_played = s.get('ranked_played', 0) or 0
+            ranked_wins = s.get('ranked_wins', 0) or 0
+            recent_played = s.get('recent_played', 0) or 0
+            recent_wins = s.get('recent_wins', 0) or 0
+
             leaderboard.append({
                 'player_id': p.id,
                 'name': p.name,
@@ -714,16 +744,41 @@ class ClubViewSet(viewsets.ModelViewSet):
                 'avatar_id': p.avatar_id,
                 'role': m_member.role,
                 'played': played,
-                'win_rate': win_rate
+                'wins': wins,
+                'defeats': played - wins,
+                'win_rate': (wins / played * 100) if played > 0 else 0,
+                'star_player': s.get('star_player', 0) or 0,
+                'avg_trophies': round(s.get('avg_trophies', 0) or 0),
+                'ranked_played': ranked_played,
+                'ranked_wins': ranked_wins,
+                'ranked_win_rate': (ranked_wins / ranked_played * 100) if ranked_played > 0 else 0,
+                'normal_played': s.get('normal_played', 0) or 0,
+                'normal_wins': s.get('normal_wins', 0) or 0,
+                'normal_win_rate': ((s.get('normal_wins', 0) or 0) / ((s.get('normal_played', 0) or 0)) * 100) if (s.get('normal_played', 0) or 0) > 0 else 0,
+                'recent_played': recent_played,
+                'recent_wins': recent_wins,
+                'recent_win_rate': (recent_wins / recent_played * 100) if recent_played > 0 else 0,
+                'top_brawler': top_brawler_map.get(p.id, None),
             })
-            
-        leaderboard.sort(key=lambda x: (x['win_rate'], x['played']), reverse=True)
-        
+
+        sort_key_map = {
+            'win_rate': lambda x: (x['win_rate'], x['played']),
+            'played': lambda x: (x['played'], x['win_rate']),
+            'star_player': lambda x: (x['star_player'], x['win_rate']),
+            'avg_trophies': lambda x: (x['avg_trophies'], x['win_rate']),
+            'ranked_win_rate': lambda x: (x['ranked_win_rate'], x['ranked_played']),
+            'recent_win_rate': lambda x: (x['recent_win_rate'], x['recent_played']),
+            'name': lambda x: (x['name'],),
+        }
+        key_fn = sort_key_map.get(sort_by, sort_key_map['win_rate'])
+        leaderboard.sort(key=key_fn, reverse=True)
+
         return response.Response({
             'total_matches': total_matches,
             'overall_win_rate': overall_win_rate,
             'modes': modes,
             'brawlers': brawlers_list,
+            'sort_by': sort_by,
             'leaderboard': leaderboard
         })
 

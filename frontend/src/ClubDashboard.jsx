@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from './services/api';
 import './ClubDashboard.css';
-import StatsDashboard from './StatsDashboard';
-import BattleLog from './components/BattleLog';
+
 
 export default function ClubDashboard({
   me,
@@ -48,9 +47,7 @@ export default function ClubDashboard({
   const [syncingClubMatches, setSyncingClubMatches] = useState(false);
   const [linkingAccount, setLinkingAccount] = useState(false);
 
-  // Teammate Profile States
-  const [selectedMemberProfileMatches, setSelectedMemberProfileMatches] = useState([]);
-  const [loadingMemberProfile, setLoadingMemberProfile] = useState(false);
+
 
   // Forum State
   const [categories, setCategories] = useState([]);
@@ -68,6 +65,7 @@ export default function ClubDashboard({
   // Club Stats State
   const [clubStats, setClubStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [sortBy, setSortBy] = useState('win_rate');
 
   // Internal tab for club pages (stats/roster)
   const [activeClubTab, setActiveClubTab] = useState('stats');
@@ -83,28 +81,7 @@ export default function ClubDashboard({
     loadClubData();
   }, [me]);
 
-  // Load Teammate Profile Matches on tag/view change
-  useEffect(() => {
-    if (view === 'member' && tag && clubStatus.in_club && clubStatus.club?.members) {
-      const cleanTag = tag.toUpperCase().replace('#', '');
-      const member = clubStatus.club.members.find(
-        m => m.player_tag && m.player_tag.toUpperCase().replace('#', '') === cleanTag
-      );
-      if (member) {
-        setLoadingMemberProfile(true);
-        api.fetchMatches(null, member.player_tag)
-          .then(matchesData => {
-            setSelectedMemberProfileMatches(matchesData);
-          })
-          .catch(err => {
-            console.error("Failed to load teammate matches:", err);
-          })
-          .finally(() => {
-            setLoadingMemberProfile(false);
-          });
-      }
-    }
-  }, [view, tag, clubStatus]);
+
 
   const loadUnlinkedProfiles = async (clubId) => {
     try {
@@ -162,10 +139,11 @@ export default function ClubDashboard({
     }
   };
 
-  const loadClubStats = async (clubId) => {
+  const loadClubStats = async (clubId, sort = null) => {
     setLoadingStats(true);
     try {
-      const stats = await api.fetchClubStats(clubId);
+      const s = sort || sortBy;
+      const stats = await api.fetchClubStats(clubId, s);
       setClubStats(stats);
     } catch (err) {
       console.error('Failed to load club stats:', err);
@@ -667,73 +645,6 @@ export default function ClubDashboard({
   const pendingMembers = club.members.filter(m => !m.is_approved);
   const inactiveMembers = club.members.filter(m => m.is_approved && !m.is_active);
 
-  if (view === 'member') {
-    return (
-      <div className="club-page-wrapper">
-        <div style={{ marginBottom: '15px' }}>
-          <button 
-            className="btn btn-secondary" 
-            onClick={() => navigate('/club/roster')}
-            style={{ fontSize: '13px' }}
-          >
-            ◀ Back to Roster
-          </button>
-        </div>
-
-        {error && <div className="club-alert club-alert-error">❌ {error}</div>}
-        {success && <div className="club-alert club-alert-success">✓ {success}</div>}
-
-        {/* Club Header Panel */}
-        <div className="glass-panel club-header-banner">
-          <div style={{ flex: 1 }}>
-            <span className="club-badge-icon">🛡️</span>
-            <div style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '15px' }}>
-              <h1 className="club-title">{club.name}</h1>
-              <p className="club-meta">Tag: <strong>{club.tag}</strong> | Members: <strong>{approvedMembers.length}</strong> | Your Role: <span className="role-tag">{clubStatus.role.toUpperCase().replace('_', ' ')}</span></p>
-            </div>
-          </div>
-          {club.description && <div className="club-header-desc">"{club.description}"</div>}
-        </div>
-
-        <div className="glass-panel club-panel-section" style={{ marginTop: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '15px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-              <h2 style={{ margin: 0 }}>
-                👤 Stats: {club.members.find(m => m.player_tag && m.player_tag.toUpperCase().replace('#', '') === (tag ? tag.toUpperCase().replace('#', '') : ''))?.player_name || 'Member'}
-              </h2>
-            </div>
-          </div>
-          {loadingMemberProfile ? (
-            <div className="club-loading-container">
-              <div className="spinner"></div>
-              <p>Loading member data...</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
-              <StatsDashboard
-                matches={selectedMemberProfileMatches}
-                perceptions={[]}
-                brawlers={brawlers}
-                allMaps={allMaps}
-                brawlerMeta={brawlerMeta}
-                minNormalTrophies={minNormalTrophies}
-                onClose={() => navigate('/club/roster')}
-              />
-              <div style={{ marginTop: '20px' }}>
-                <BattleLog
-                  matches={selectedMemberProfileMatches}
-                  brawlers={brawlers}
-                  allMaps={allMaps}
-                  isOwnProfile={false}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="club-page-wrapper">
       {/* Alert Banners */}
@@ -808,17 +719,43 @@ export default function ClubDashboard({
                       </div>
                     </div>
 
-                    {/* Leaderboard Table */}
-                    <h3 style={{ marginTop: '25px', marginBottom: '15px', fontSize: '1.1rem' }}>🏆 Member Leaderboard</h3>
-                    <div className="leaderboard-table-wrapper">
-                      <table className="leaderboard-table">
+                    {/* Leaderboard */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '25px', marginBottom: '15px' }}>
+                      <h3 style={{ margin: 0, fontSize: '1.1rem' }}>🏆 Member Leaderboard</h3>
+                      <select
+                        value={sortBy}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSortBy(val);
+                          loadClubStats(clubStatus.club.id, val);
+                        }}
+                        className="role-select"
+                        style={{ width: 'auto', padding: '4px 8px', fontSize: '0.8rem' }}
+                      >
+                        <option value="win_rate">Win Rate</option>
+                        <option value="played">Games Played</option>
+                        <option value="ranked_win_rate">Ranked WR</option>
+                        <option value="recent_win_rate">Recent WR (7d)</option>
+                        <option value="star_player">Star Player</option>
+                        <option value="avg_trophies">Avg Trophies</option>
+                        <option value="name">Name</option>
+                      </select>
+                    </div>
+                    <div className="leaderboard-table-wrapper" style={{ overflowX: 'auto' }}>
+                      <table className="leaderboard-table" style={{ minWidth: '650px' }}>
                         <thead>
                           <tr>
                             <th>#</th>
                             <th>Player</th>
                             <th>Role</th>
-                            <th>Games</th>
-                            <th>Win Rate</th>
+                            <th>W</th>
+                            <th>L</th>
+                            <th>WR</th>
+                            <th>Ranked WR</th>
+                            <th>Recent WR</th>
+                            <th>☆</th>
+                            <th>Avg 🏆</th>
+                            <th>Top Brawler</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -828,7 +765,7 @@ export default function ClubDashboard({
                             <tr key={member.player_id} className={me && member.player_id === me.id ? 'highlight-row' : ''}>
                               <td>{idx + 1}</td>
                               <td>
-                                <div className="leaderboard-player">
+                                <div className="leaderboard-player" style={{ whiteSpace: 'nowrap' }}>
                                   {member.avatar_id ? (
                                     <img src={`https://cdn.brawlify.com/profile-icons/regular/${member.avatar_id}.png`} alt="" className="leaderboard-avatar" />
                                   ) : (
@@ -838,15 +775,25 @@ export default function ClubDashboard({
                                 </div>
                               </td>
                               <td><span className={`role-badge ${member.role}`}>{member.role.replace('_', ' ')}</span></td>
-                              <td>{member.played}</td>
+                              <td>{member.wins}</td>
+                              <td>{member.defeats}</td>
                               <td className={member.win_rate >= 55 ? 'wr-high' : member.win_rate >= 50 ? 'wr-mid' : 'wr-low'}>
                                 {member.win_rate.toFixed(1)}%
                               </td>
+                              <td className={member.ranked_win_rate >= 55 ? 'wr-high' : member.ranked_win_rate >= 50 ? 'wr-mid' : 'wr-low'}>
+                                {member.ranked_played > 0 ? `${member.ranked_win_rate.toFixed(1)}%` : '-'}
+                              </td>
+                              <td className={member.recent_win_rate >= 55 ? 'wr-high' : member.recent_win_rate >= 50 ? 'wr-mid' : 'wr-low'}>
+                                {member.recent_played > 0 ? `${member.recent_win_rate.toFixed(1)}%` : '-'}
+                              </td>
+                              <td>{member.star_player}</td>
+                              <td>{member.avg_trophies > 0 ? member.avg_trophies : '-'}</td>
+                              <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{member.top_brawler || '-'}</td>
                             </tr>
                           ))}
                           {clubStats.leaderboard.filter(m => m.played > 0).length === 0 && (
                             <tr>
-                              <td colSpan={5} className="empty-table-msg">No matches logged yet. Sync your battle logs!</td>
+                              <td colSpan={11} className="empty-table-msg">No matches logged yet. Sync your battle logs!</td>
                             </tr>
                           )}
                         </tbody>
@@ -920,14 +867,8 @@ export default function ClubDashboard({
               {approvedMembers.map(member => (
                 <div 
                   key={member.id} 
-                  className={`roster-item ${member.is_linked ? 'roster-item-clickable' : ''}`}
+                  className="roster-item"
                   style={{ flexDirection: 'column', alignItems: 'stretch' }}
-                  onClick={() => {
-                    if (member.is_linked && member.player_tag) {
-                      const cleanTag = member.player_tag.replace('#', '');
-                      navigate(`/club/member/${cleanTag}`);
-                    }
-                  }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                     {member.avatar_id ? (
