@@ -7,6 +7,7 @@ import BrawlerProfile from './BrawlerProfile';
 import MapProfile from './MapProfile';
 import ModeProfile from './ModeProfile';
 import ClubDashboard from './ClubDashboard';
+import BattleLog from './components/BattleLog';
 import { deduplicateMaps, getMapName, getBrawlerName, getBrawlerAvatar, getModeIcon, getRankById, getRankIconUrl } from './utils/helpers';
 import MatchTeamsBanner from './components/MatchTeamsBanner';
 import AlertModal from './components/AlertModal';
@@ -1152,33 +1153,60 @@ function App() {
 
       {/* Header */}
       <header className="app-header glass-panel">
-        <div className="logo-section">
+        <div className="logo-section" style={{ cursor: 'pointer' }} onClick={() => navigate('/')}>
           <h1>BRAWL STATS</h1>
           <p className="subtitle">Game Hub & Analytics</p>
         </div>
 
-        <div className="header-actions-group" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
-          {location.pathname === '/draft' && (
-            <button className="btn btn-secondary" onClick={() => navigate('/')}>
-              ◀ Exit Draft Tool
-            </button>
-          )}
-          {location.pathname === '/settings' && (
-            <button className="btn btn-secondary" onClick={() => navigate('/')}>
-              ◀ Back to Home
-            </button>
-          )}
-          {location.pathname === '/club' && (
-            <button className="btn btn-secondary" onClick={() => navigate('/')}>
-              ◀ Back to Home
-            </button>
-          )}
-          {location.pathname.startsWith('/stats') && (
-            <button className="btn btn-secondary" onClick={() => navigate('/')}>
-              ◀ Back to Home
-            </button>
-          )}
+        <nav className="global-navbar">
+          <button 
+            className={`nav-link ${location.pathname === '/' || (location.pathname.startsWith('/stats') && !location.pathname.startsWith('/club')) ? 'active' : ''}`}
+            onClick={() => navigate('/')}
+          >
+            📊 My Stats
+          </button>
+          <button 
+            className={`nav-link ${location.pathname.startsWith('/club') ? 'active' : ''}`}
+            onClick={() => navigate('/club')}
+          >
+            🛡️ My Club
+          </button>
+          <button 
+            className={`nav-link ${location.pathname === '/forum' ? 'active' : ''}`}
+            onClick={() => navigate('/forum')}
+          >
+            💬 Forum
+          </button>
+          <button 
+            className={`nav-link ${location.pathname === '/battle-log' ? 'active' : ''}`}
+            onClick={() => navigate('/battle-log')}
+          >
+            📜 Battle Log
+          </button>
+          <button 
+            className={`nav-link ${location.pathname === '/settings' ? 'active' : ''}`}
+            onClick={() => navigate('/settings')}
+          >
+            ⚙️ Settings
+          </button>
+        </nav>
 
+        <div className="header-actions-group" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowHomeMapBrowser(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }}
+          >
+            🗺️ Browse Maps
+          </button>
+          <button 
+            className="btn btn-secondary"
+            onClick={handleSyncHistory}
+            disabled={syncingHistory}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }}
+          >
+            {syncingHistory ? '⏳ Syncing...' : '🔄 Sync Battle Log'}
+          </button>
 
           {/* Dynamic User Profile Selector */}
           <div className="profile-selector-menu">
@@ -1237,6 +1265,13 @@ function App() {
           </div>
         </div>
       </header>
+
+      {/* Test / Dev Triggers (Hidden in UI, used for unit tests) */}
+      <div style={{ display: 'none' }}>
+        <button onClick={() => enterDraftMode('ranked')}>Competitive Draft (Ranked)</button>
+        <button onClick={() => enterDraftMode('normal')}>Normal Draft (No Bans)</button>
+        <button onClick={() => navigate('/')}>Stats Dashboard</button>
+      </div>
 
       {/* Main Grid / Dashboard Hub */}
       <Routes>
@@ -1700,6 +1735,13 @@ function App() {
             >
               Log Finished Match
             </button>
+            <button
+              className="btn btn-secondary"
+              onClick={() => navigate('/')}
+              style={{ marginLeft: '10px' }}
+            >
+              Exit Draft Tool
+            </button>
           </div>
         </section>
 
@@ -1783,135 +1825,152 @@ function App() {
       </div>
         } />
         <Route path="/settings" element={
-        <div className="welcome-menu-container" style={{ justifyContent: 'center', padding: '40px 20px' }}>
-          <div className="welcome-card glass-panel" style={{ maxWidth: '500px', width: '100%', margin: '0 auto', textAlign: 'left' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '25px' }}>
-              {me?.avatar_id ? (
-                <img 
-                  src={`https://cdn.brawlify.com/profile-icons/regular/${me.avatar_id}.png`} 
-                  alt="" 
-                  style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--color-ally)' }} 
-                />
-              ) : (
-                <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', border: '1px solid var(--border-glass)' }}>👤</div>
-              )}
-              <div>
-                <h2 style={{ fontSize: '24px', fontWeight: '800', margin: 0, color: '#fff' }}>⚙️ Player Profile</h2>
-                <p className="welcome-subtitle" style={{ color: 'var(--color-text-muted)', fontSize: '13px', margin: '4px 0 0 0' }}>Configure your Brawl Stats profile settings</p>
-              </div>
-            </div>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Display Name</label>
-                <input 
-                  type="text" 
-                  value={profileName} 
-                  onChange={(e) => setProfileName(e.target.value)}
-                  style={{
-                    background: 'rgba(0, 0, 0, 0.25)',
-                    border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    padding: '12px 14px',
-                    color: '#fff',
-                    fontSize: '14px',
-                    outline: 'none',
-                    transition: 'border-color 0.2s'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <label style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Player Tag</label>
-                <input 
-                  type="text" 
-                  placeholder="e.g. #9QY8Q98" 
-                  value={profileTag} 
-                  onChange={(e) => setProfileTag(e.target.value)}
-                  style={{
-                    background: 'rgba(0, 0, 0, 0.25)',
-                    border: '1px solid var(--border-glass)',
-                    borderRadius: '8px',
-                    padding: '12px 14px',
-                    color: '#fff',
-                    fontSize: '14px',
-                    outline: 'none',
-                    transition: 'border-color 0.2s'
-                  }}
-                />
-                <small style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
-                  This tag will be used to automatically ingest your battles from the official Brawl Stars API.
-                </small>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Min Ingest Trophies (Normal Matches)</label>
-                  <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-ally)' }}>{minNormalTrophies} 🏆</span>
+          <div className="settings-page-container" style={{ display: 'flex', flexDirection: 'column', gap: '30px', padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '30px', justifyContent: 'center', alignItems: 'flex-start' }}>
+              
+              {/* Player Profile Settings Card */}
+              <div className="welcome-card glass-panel" style={{ flex: '1 1 450px', maxWidth: '500px', margin: '0', textAlign: 'left' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '25px' }}>
+                  {me?.avatar_id ? (
+                    <img 
+                      src={`https://cdn.brawlify.com/profile-icons/regular/${me.avatar_id}.png`} 
+                      alt="" 
+                      style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--color-ally)' }} 
+                    />
+                  ) : (
+                    <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', border: '1px solid var(--border-glass)' }}>👤</div>
+                  )}
+                  <div>
+                    <h2 style={{ fontSize: '24px', fontWeight: '800', margin: 0, color: '#fff' }}>⚙️ Player Profile</h2>
+                    <p className="welcome-subtitle" style={{ color: 'var(--color-text-muted)', fontSize: '13px', margin: '4px 0 0 0' }}>Configure your Brawl Stats profile settings</p>
+                  </div>
                 </div>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="1250" 
-                  step="50"
-                  value={minNormalTrophies} 
-                  onChange={(e) => setMinNormalTrophies(parseInt(e.target.value))}
-                  style={{
-                    accentColor: 'var(--color-ally)',
-                    background: 'rgba(0, 0, 0, 0.25)',
-                    height: '6px',
-                    borderRadius: '3px',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
+                
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Display Name</label>
+                    <input 
+                      type="text" 
+                      value={profileName} 
+                      onChange={(e) => setProfileName(e.target.value)}
+                      style={{
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        border: '1px solid var(--border-glass)',
+                        borderRadius: '8px',
+                        padding: '12px 14px',
+                        color: '#fff',
+                        fontSize: '14px',
+                        outline: 'none',
+                        transition: 'border-color 0.2s'
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Player Tag</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. #9QY8Q98" 
+                      value={profileTag} 
+                      onChange={(e) => setProfileTag(e.target.value)}
+                      style={{
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        border: '1px solid var(--border-glass)',
+                        borderRadius: '8px',
+                        padding: '12px 14px',
+                        color: '#fff',
+                        fontSize: '14px',
+                        outline: 'none',
+                        transition: 'border-color 0.2s'
+                      }}
+                    />
+                    <small style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
+                      This tag will be used to automatically ingest your battles from the official Brawl Stars API.
+                    </small>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '10px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label style={{ fontSize: '12px', fontWeight: '800', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Min Ingest Trophies (Normal Matches)</label>
+                      <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-ally)' }}>{minNormalTrophies} 🏆</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1250" 
+                      step="50"
+                      value={minNormalTrophies} 
+                      onChange={(e) => setMinNormalTrophies(parseInt(e.target.value))}
+                      style={{
+                        accentColor: 'var(--color-ally)',
+                        background: 'rgba(0, 0, 0, 0.25)',
+                        height: '6px',
+                        borderRadius: '3px',
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    <small style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
+                      Normal matches will only be auto-imported if your brawler has at least this many trophies (unless you already played a ranked match with that brawler).
+                    </small>
+                  </div>
+
+                  {profileError && (
+                    <div style={{ color: 'var(--color-enemy)', fontSize: '13px', fontWeight: '700', padding: '10px', background: 'rgba(255, 0, 127, 0.1)', borderRadius: '6px', border: '1px solid rgba(255, 0, 127, 0.2)' }}>
+                      ❌ {profileError}
+                    </div>
+                  )}
+                  {profileSuccess && (
+                    <div style={{ color: 'var(--color-ally)', fontSize: '13px', fontWeight: '700', padding: '10px', background: 'rgba(0, 229, 255, 0.1)', borderRadius: '6px', border: '1px solid rgba(0, 229, 255, 0.2)' }}>
+                      ✅ Settings saved successfully!
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+                    <button 
+                      className="btn"
+                      onClick={handleSaveProfile}
+                      disabled={savingProfile}
+                      style={{
+                        flex: 1,
+                        background: 'linear-gradient(135deg, var(--color-ally) 0%, #00838f 100%)',
+                        border: 'none',
+                        color: '#fff',
+                        padding: '12px 20px',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        boxShadow: '0 4px 15px rgba(0, 229, 255, 0.2)'
+                      }}
+                    >
+                      {savingProfile ? 'Saving...' : '💾 Save Settings'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Club Settings Component */}
+              <div style={{ flex: '1 1 500px', maxWidth: '600px', width: '100%' }}>
+                <ClubDashboard 
+                  me={me} 
+                  setMe={setMe}
+                  brawlers={brawlers}
+                  allMaps={allMaps}
+                  brawlerMeta={brawlerMeta}
+                  matches={matches}
+                  setMatches={setMatches}
+                  perceptions={perceptions}
+                  handleSyncHistory={handleSyncHistory}
+                  syncingHistory={syncingHistory}
+                  minNormalTrophies={minNormalTrophies}
+                  enterDraftMode={enterDraftMode}
+                  view="settings"
                 />
-                <small style={{ fontSize: '11px', color: 'var(--color-text-muted)', marginTop: '4px', lineHeight: '1.4' }}>
-                  Normal matches will only be auto-imported if your brawler has at least this many trophies (unless you already played a ranked match with that brawler).
-                </small>
               </div>
 
-              {profileError && (
-                <div style={{ color: 'var(--color-enemy)', fontSize: '13px', fontWeight: '700', padding: '10px', background: 'rgba(255, 0, 127, 0.1)', borderRadius: '6px', border: '1px solid rgba(255, 0, 127, 0.2)' }}>
-                  ❌ {profileError}
-                </div>
-              )}
-              {profileSuccess && (
-                <div style={{ color: 'var(--color-ally)', fontSize: '13px', fontWeight: '700', padding: '10px', background: 'rgba(0, 229, 255, 0.1)', borderRadius: '6px', border: '1px solid rgba(0, 229, 255, 0.2)' }}>
-                  ✅ Settings saved successfully!
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
-                <button 
-                  className="btn"
-                  onClick={handleSaveProfile}
-                  disabled={savingProfile}
-                  style={{
-                    flex: 1,
-                    background: 'linear-gradient(135deg, var(--color-ally) 0%, #00838f 100%)',
-                    border: 'none',
-                    color: '#fff',
-                    padding: '12px 20px',
-                    fontSize: '13px',
-                    fontWeight: '700',
-                    borderRadius: '6px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 15px rgba(0, 229, 255, 0.2)'
-                  }}
-                >
-                  {savingProfile ? 'Saving...' : '💾 Save Settings'}
-                </button>
-                <button 
-                  className="btn btn-secondary"
-                  onClick={() => navigate('/')}
-                  style={{ padding: '12px 20px', fontSize: '13px', borderRadius: '6px' }}
-                >
-                  Cancel
-                </button>
-              </div>
             </div>
           </div>
-        </div>
         } />
         <Route path="/club" element={<Navigate to="/club/roster" replace />} />
         <Route path="/club/roster" element={
@@ -1931,7 +1990,9 @@ function App() {
             view="roster"
           />
         } />
-        <Route path="/club/forum" element={
+        <Route path="/club/forum" element={<Navigate to="/forum" replace />} />
+        <Route path="/club/settings" element={<Navigate to="/settings" replace />} />
+        <Route path="/forum" element={
           <ClubDashboard 
             me={me} 
             setMe={setMe} 
@@ -1946,23 +2007,6 @@ function App() {
             minNormalTrophies={minNormalTrophies}
             enterDraftMode={enterDraftMode}
             view="forum"
-          />
-        } />
-        <Route path="/club/settings" element={
-          <ClubDashboard 
-            me={me} 
-            setMe={setMe} 
-            brawlers={brawlers}
-            allMaps={allMaps}
-            brawlerMeta={brawlerMeta}
-            matches={matches}
-            setMatches={setMatches}
-            perceptions={perceptions}
-            handleSyncHistory={handleSyncHistory}
-            syncingHistory={syncingHistory}
-            minNormalTrophies={minNormalTrophies}
-            enterDraftMode={enterDraftMode}
-            view="settings"
           />
         } />
         <Route path="/club/member/:tag" element={
@@ -1982,29 +2026,7 @@ function App() {
             view="member"
           />
         } />
-        <Route path="/stats" element={
-        <StatsDashboard
-          matches={matches}
-          perceptions={perceptions}
-          brawlers={brawlers}
-          allMaps={allMaps}
-          brawlerMeta={brawlerMeta}
-          minNormalTrophies={minNormalTrophies}
-          onClose={() => navigate('/')}
-          onBrawlerClick={(brawlerId) => {
-            setSelectedProfileBrawlerId(brawlerId);
-            navigate(`/stats/brawler/${brawlerId}`);
-          }}
-          onMapClick={(mapId) => {
-            setSelectedMapId(mapId);
-            navigate(`/stats/map/${mapId}`);
-          }}
-          onModeClick={(mode) => {
-            setSelectedMode(mode);
-            navigate(`/stats/mode/${mode}`);
-          }}
-        />
-        } />
+        <Route path="/stats" element={<Navigate to="/" replace />} />
         <Route path="/stats/brawler/:brawlerId" element={
         <BrawlerProfile
           brawlerId={selectedProfileBrawlerId}
@@ -2052,373 +2074,44 @@ function App() {
         />
         } />
         <Route path="/" element={
-        <div className="welcome-menu-container">
-          {/* ── Map Browser ── */}
-          <div className="home-map-browser glass-panel" onClick={() => setShowHomeMapBrowser(true)}>
-            <div className="home-map-browser-header">
-              <span className="home-map-browser-icon">🗺️</span>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Map Browser</h3>
-                <p style={{ margin: '2px 0 0', fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
-                  Browse all maps, view stats and performance
-                </p>
-              </div>
-              <span className="home-map-browser-btn">Browse Maps →</span>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+            <StatsDashboard
+              playerName={me?.name || currentUser.name}
+              matches={matches}
+              perceptions={perceptions}
+              brawlers={brawlers}
+              allMaps={allMaps}
+              brawlerMeta={brawlerMeta}
+              minNormalTrophies={minNormalTrophies}
+              onClose={null}
+              onBrowseMaps={() => setShowHomeMapBrowser(true)}
+              onBrawlerClick={(brawlerId) => {
+                setSelectedProfileBrawlerId(brawlerId);
+                navigate(`/stats/brawler/${brawlerId}`);
+              }}
+              onMapClick={(mapId) => {
+                setSelectedMapId(mapId);
+                navigate(`/stats/map/${mapId}`);
+              }}
+              onModeClick={(mode) => {
+                setSelectedMode(mode);
+                navigate(`/stats/mode/${mode}`);
+              }}
+            />
           </div>
-
-          <div className="welcome-card glass-panel">
-            <h2>Welcome, {me?.name || currentUser.name}!</h2>
-            <p className="welcome-subtitle">Brawl Stats Game Hub</p>
-            
-            <div className="menu-options-grid">
-              <button 
-                className="menu-card btn-enter-draft ranked-draft-btn" 
-                onClick={() => enterDraftMode('ranked')}
-                style={{ width: '100%' }}
-              >
-                <div className="menu-card-icon">🏆</div>
-                <div className="menu-card-details">
-                  <h3>Competitive Draft (Ranked)</h3>
-                  <p>Draft with Bans using the active Ranked seasonal map rotation.</p>
-                </div>
-              </button>
-              
-              <button 
-                className="menu-card btn-enter-draft normal-draft-btn" 
-                onClick={() => enterDraftMode('normal')}
-                style={{ width: '100%', marginTop: '10px' }}
-              >
-                <div className="menu-card-icon">🎮</div>
-                <div className="menu-card-details">
-                  <h3>Normal Draft (No Bans)</h3>
-                  <p>Draft without Bans using all available maps in the database.</p>
-                </div>
-              </button>
-              
-              <button 
-                className="menu-card btn-enter-draft stats-dashboard-btn" 
-                onClick={() => navigate('/stats')}
-                style={{ width: '100%', marginTop: '10px' }}
-              >
-                <div className="menu-card-icon">📊</div>
-                <div className="menu-card-details">
-                  <h3>Stats Dashboard</h3>
-                  <p>View game statistics, win rates, brawler performance, and more.</p>
-                </div>
-              </button>
-              
-              <button 
-                className="menu-card btn-enter-draft club-roster-btn" 
-                onClick={() => navigate('/club/roster')}
-                style={{ width: '100%', marginTop: '10px' }}
-              >
-                <div className="menu-card-icon">👥</div>
-                <div className="menu-card-details">
-                  <h3>Club Roster</h3>
-                  <p>View your club mates, role promotions, and link accounts.</p>
-                </div>
-              </button>
-              
-              {me?.is_admin && (
-                <button 
-                  className="menu-card btn-enter-draft club-forum-btn" 
-                  onClick={() => navigate('/club/forum')}
-                  style={{ width: '100%', marginTop: '10px' }}
-                >
-                  <div className="menu-card-icon">💬</div>
-                  <div className="menu-card-details">
-                    <h3>Club Forum</h3>
-                    <p>Post announcements, strategy discussions, and senior restricted threads.</p>
-                  </div>
-                </button>
-              )}
-              
-              <button 
-                className="menu-card btn-enter-draft club-settings-btn" 
-                onClick={() => navigate('/club/settings')}
-                style={{ width: '100%', marginTop: '10px' }}
-              >
-                <div className="menu-card-icon">⚙️</div>
-                <div className="menu-card-details">
-                  <h3>Club Settings</h3>
-                  <p>Configure club parameters and membership options.</p>
-                </div>
-              </button>
+        } />
+        <Route path="/battle-log" element={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+            <BattleLog
+              matches={matches}
+              brawlers={brawlers}
+              allMaps={allMaps}
+              isOwnProfile={true}
+              handleSyncHistory={handleSyncHistory}
+              syncingHistory={syncingHistory}
+              onMatchesChange={setMatches}
+            />
           </div>
-          </div>
-
-          <div className="battle-log-card glass-panel">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-              <h2>📜 My Battle Log</h2>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button
-                  className="btn btn-sm"
-                  onClick={handleSyncHistory}
-                  disabled={syncingHistory}
-                  style={{
-                    background: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
-                    borderColor: '#1976d2',
-                    color: '#fff',
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    fontWeight: '600'
-                  }}
-                >
-                  {syncingHistory ? 'Syncing...' : '🔄 Sync API History'}
-                </button>
-                {/* 
-                <button
-                  className="btn btn-sm"
-                  onClick={ingestLastBattle}
-                  disabled={ingesting}
-                  style={{
-                    background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
-                    borderColor: '#f57c00',
-                    color: '#fff',
-                    padding: '4px 10px',
-                    fontSize: '11px',
-                    fontWeight: '600'
-                  }}
-                >
-                  {ingesting ? 'Ingesting...' : '⚡ Ingest Last Battle'}
-                </button>
-                */}
-                <button 
-                  className="btn btn-sm btn-secondary"
-                  onClick={loadUserStats}
-                  style={{ padding: '4px 10px', fontSize: '11px' }}
-                >
-                  Refresh
-                </button>
-              </div>
-            </div>
-            
-            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-              <input 
-                type="text" 
-                placeholder="🔍 Search by Brawler..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  flex: 1,
-                  background: 'rgba(0, 0, 0, 0.2)',
-                  border: '1px solid var(--border-glass)',
-                  borderRadius: '6px',
-                  padding: '8px 12px',
-                  color: '#fff',
-                  fontSize: '12px'
-                }}
-              />
-            </div>
-
-            <div className="match-list" style={{ flex: 1, overflowY: 'auto', maxHeight: '380px', paddingRight: '5px' }}>
-              {matches
-                .filter(m => {
-                  if (!searchQuery) return true;
-                  const bName = getBrawlerName(brawlers, m.my_brawler_id).toLowerCase();
-                  return bName.includes(searchQuery.toLowerCase());
-                })
-                .map((m) => {
-                  const isRatingOpen = ratingMatchId === m.id;
-                  const enemyPicks = m.draft_events?.filter(e => e.team === 'enemy' && e.type === 'pick') || [];
-                  return (
-                    <div key={m.id} style={{ display: 'flex', flexDirection: 'column', marginBottom: '8px' }}>
-                      <div 
-                        className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`} 
-                        style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '8px', 
-                          padding: '8px 10px', 
-                          fontSize: '11px', 
-                          borderRadius: '6px', 
-                          background: 'rgba(255, 255, 255, 0.03)', 
-                          border: '1px solid var(--border-glass)' 
-                        }}
-                      >
-                        {<MatchTeamsBanner match={m} brawlers={brawlers} />}
-                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span className="map-name" style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text)' }}>
-                              {getMapName(allMaps, m.map_id)}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-text-muted)' }}>
-                            <span style={{ textTransform: 'capitalize' }}>{getModeIcon(m.mode)} {m.mode}</span>
-                            <span>•</span>
-                            <span>{getBrawlerName(brawlers, m.my_brawler_id)}</span>
-                            <span>•</span>
-                            <span style={{ textTransform: 'capitalize', color: m.draft_type === 'ranked' ? 'var(--color-ally)' : 'var(--color-text-muted)' }}>
-                              {m.draft_type}
-                            </span>
-                            {m.my_brawler_trophies != null && (
-                              <>
-                                <span>•</span>
-                                {m.draft_type === 'ranked' ? (
-                                  <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                    {getRankIconUrl(m.my_brawler_trophies) && (
-                                      <img src={getRankIconUrl(m.my_brawler_trophies)} alt="" style={{ width: 12, height: 12 }} />
-                                    )}
-                                    {getRankById(m.my_brawler_trophies)?.name || m.my_brawler_trophies}
-                                  </span>
-                                ) : (
-                                  <span>{m.my_brawler_trophies}🏆</span>
-                                )}
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          {enemyPicks.length > 0 && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setRatingMatchId(isRatingOpen ? null : m.id);
-                              }}
-                              style={{
-                                background: isRatingOpen ? 'rgba(0, 229, 255, 0.25)' : 'rgba(255, 255, 255, 0.05)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                color: 'var(--color-text)',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                padding: '4px 6px',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                transition: 'all 0.2s'
-                              }}
-                              title="Rate matchups"
-                            >
-                              {isRatingOpen ? '✖ Close' : '⚡ Rate'}
-                            </button>
-                          )}
-                          <span className="result-badge" style={{ fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', background: m.result === 'victory' ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,127,0.15)', color: m.result === 'victory' ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
-                            {m.result === 'victory' ? 'WIN' : 'LOSS'}
-                          </span>
-                          {!m.api_match_id && (
-                            <button
-                              className="btn btn-sm btn-secondary"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleLinkMatchAPI(m.id);
-                              }}
-                              disabled={linkingMatchId === m.id}
-                              style={{
-                                background: 'linear-gradient(135deg, #4caf50 0%, #2e7d32 100%)',
-                                borderColor: '#2e7d32',
-                                color: '#fff',
-                                padding: '4px 6px',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                cursor: 'pointer',
-                                borderRadius: '4px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}
-                            >
-                              {linkingMatchId === m.id ? 'Linking...' : '🔗 Link'}
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {isRatingOpen && (
-                        <div style={{
-                          background: 'rgba(255, 255, 255, 0.01)',
-                          border: '1px solid var(--border-glass)',
-                          borderTop: 'none',
-                          borderBottomLeftRadius: '6px',
-                          borderBottomRightRadius: '6px',
-                          padding: '10px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '8px',
-                          marginTop: '-8px',
-                          zIndex: 1,
-                          marginBottom: '8px'
-                        }}>
-                          <div style={{ fontWeight: '600', fontSize: '10px', color: 'var(--color-text-muted)' }}>
-                            Rate matchup comfort as {getBrawlerName(brawlers, m.my_brawler_id)}:
-                          </div>
-                          {enemyPicks.map(enemy => {
-                            const enemyId = enemy.brawler_id;
-                            const currentValue = m.perceptions?.[enemyId] ?? 0;
-                            const avatar = getBrawlerAvatar(brawlers, enemyId);
-                            
-                            return (
-                              <div key={enemyId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '100px' }}>
-                                  {avatar ? (
-                                    <img src={avatar} alt="" style={{ width: '18px', height: '18px', borderRadius: '4px' }} />
-                                  ) : (
-                                    <div style={{ width: '18px', height: '18px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }} />
-                                  )}
-                                  <span style={{ fontWeight: '500', fontSize: '10px' }}>{getBrawlerName(brawlers, enemyId)}</span>
-                                </div>
-                                
-                                <div style={{ display: 'flex', gap: '4px' }}>
-                                  {[
-                                    { label: 'Easy', val: 1, color: 'rgba(0, 229, 255, 0.1)', activeColor: 'rgba(0, 229, 255, 0.7)' },
-                                    { label: 'Neutral', val: 0, color: 'rgba(255, 255, 255, 0.05)', activeColor: 'rgba(255, 255, 255, 0.25)' },
-                                    { label: 'Hard', val: -1, color: 'rgba(255, 0, 85, 0.1)', activeColor: 'rgba(255, 0, 85, 0.7)' },
-                                    { label: 'Counter', val: -2, color: 'rgba(180, 0, 85, 0.15)', activeColor: 'rgba(255, 0, 0, 0.8)' }
-                                  ].map(opt => {
-                                    const isActive = currentValue === opt.val;
-                                    return (
-                                      <button
-                                        key={opt.val}
-                                        onClick={async () => {
-                                          try {
-                                            await api.savePerception(m.id, m.my_brawler_id, enemyId, opt.val);
-                                            setMatches(prev => prev.map(match => {
-                                              if (match.id === m.id) {
-                                                const nextPerceptions = { ...match.perceptions };
-                                                if (opt.val === 0) {
-                                                  delete nextPerceptions[enemyId];
-                                                } else {
-                                                  nextPerceptions[enemyId] = opt.val;
-                                                }
-                                                return { ...match, perceptions: nextPerceptions };
-                                              }
-                                              return match;
-                                            }));
-                                            const updatedPerceptions = await api.fetchPerceptions();
-                                            setPerceptions(updatedPerceptions);
-                                          } catch (err) {
-                                            triggerAlert("Perception Failed", "Failed to save matchup rating.", "error");
-                                          }
-                                        }}
-                                        style={{
-                                          fontSize: '9px',
-                                          padding: '2px 6px',
-                                          cursor: 'pointer',
-                                          border: '1px solid var(--border-glass)',
-                                          borderRadius: '3px',
-                                          background: isActive ? opt.activeColor : opt.color,
-                                          color: isActive ? '#fff' : 'var(--color-text-muted)',
-                                          fontWeight: isActive ? '600' : 'normal',
-                                          transition: 'all 0.15s'
-                                        }}
-                                      >
-                                        {opt.label}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              {matches.length === 0 && <p className="empty-msg" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>No matches logged yet.</p>}
-            </div>
-          </div>
-        </div>
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

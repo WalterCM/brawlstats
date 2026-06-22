@@ -59,25 +59,6 @@ export default function BattleLog({
     <div className="battle-log-card glass-panel">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
         <h2>📜 {isOwnProfile ? 'My Battle Log' : 'Battle Log'}</h2>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {isOwnProfile && handleSyncHistory && (
-            <button
-              className="btn btn-sm"
-              onClick={handleSyncHistory}
-              disabled={syncingHistory}
-              style={{
-                background: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
-                borderColor: '#1976d2',
-                color: '#fff',
-                padding: '4px 10px',
-                fontSize: '11px',
-                fontWeight: '600'
-              }}
-            >
-              {syncingHistory ? 'Syncing...' : '🔄 Sync API History'}
-            </button>
-          )}
-        </div>
       </div>
       
       <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>

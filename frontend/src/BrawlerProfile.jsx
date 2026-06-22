@@ -373,13 +373,10 @@ export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [],
       <div
         className="dashboard-header glass-panel"
         style={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 50,
-          backdropFilter: 'blur(20px)',
           display: 'flex',
           alignItems: 'center',
-          gap: '20px'
+          gap: '20px',
+          marginBottom: '20px'
         }}
       >
         {brawler.image_url

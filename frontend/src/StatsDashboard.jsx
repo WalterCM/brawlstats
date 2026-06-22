@@ -4,7 +4,7 @@ import { getRankById, getRankIconUrl } from './utils/helpers';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
 import MatchFilterBar from './components/MatchFilterBar';
 
-export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onClose, onBrawlerClick, onMapClick, onModeClick }) {
+export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onClose, onBrawlerClick, onMapClick, onModeClick, onBrowseMaps, playerName }) {
   const {
     selectedMode,
     setSelectedMode,
@@ -24,6 +24,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
   const [brawlerSort, setBrawlerSort] = useState('games'); // 'games', 'winrate', 'trophies'
   const [brawlerPage, setBrawlerPage] = useState(0);
   const [sessionPage, setSessionPage] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => { setBrawlerPage(0); }, [brawlerSort, selectedMode, selectedDraftType, selectedClass, timeRange]);
 
@@ -451,18 +452,30 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
 
   return (
     <div className="stats-dashboard-container">
-      <div className="dashboard-header glass-panel" style={{ position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(20px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="dashboard-header glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <div className="dashboard-title-section">
           <h2>📊 Personal Stats Dashboard</h2>
-          <p className="welcome-subtitle">Advanced Analytics &amp; Match History Insights</p>
+          <p className="welcome-subtitle">{playerName ? `Welcome, ${playerName}! ` : ''}Advanced Analytics &amp; Match History Insights</p>
         </div>
-        <button className="btn btn-secondary" onClick={onClose}>
-          ◀ Back to Home
-        </button>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button 
+            className={`btn ${showFilters ? 'btn-secondary' : 'btn-primary'}`} 
+            onClick={() => setShowFilters(!showFilters)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }}
+          >
+            {showFilters ? '🙈 Hide Filters' : '🔍 Show Filters'}
+          </button>
+          {onClose && (
+            <button className="btn btn-secondary" onClick={onClose}>
+              ◀ Back to Home
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter Control Center */}
-      <div className="filter-center glass-panel">
+      {showFilters && (
+        <div className="filter-center glass-panel">
         <div className="filter-group-row">
           <div className="filter-control">
             <label>Game Mode</label>
@@ -509,6 +522,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
           minNormalTrophies={minNormalTrophies}
         />
       </div>
+      )}
 
       {/* KPI Section */}
       <div className="kpi-grid" style={{ marginBottom: '20px' }}>

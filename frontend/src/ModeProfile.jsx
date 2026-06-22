@@ -234,7 +234,7 @@ export default function ModeProfile({ mode: propMode, matches = [], brawlers = [
   return (
     <div className="stats-dashboard-container">
       {/* Header */}
-      <div className="dashboard-header glass-panel" style={{ position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(20px)', display: 'flex', alignItems: 'center', gap: '20px' }}>
+      <div className="dashboard-header glass-panel" style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
         <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(0,229,255,0.12)', border: '3px solid var(--color-ally)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem', flexShrink: 0 }}>
           {icon}
         </div>

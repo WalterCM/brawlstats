@@ -410,6 +410,33 @@ export default function ClubDashboard({
     );
   }
 
+  // Settings view specific guards
+  if (view === 'settings') {
+    if (!me?.player_tag) {
+      return (
+        <div className="glass-panel club-panel-section" style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'left' }}>
+          <h2>🛡️ Club Settings</h2>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '13px', margin: '10px 0 0 0' }}>
+            Please link your Brawl Stars Player Tag on the left to participate in club activities and manage settings.
+          </p>
+        </div>
+      );
+    }
+    if (!clubStatus.in_club) {
+      return (
+        <div className="glass-panel club-panel-section" style={{ maxWidth: '600px', margin: '0 auto', textAlign: 'left' }}>
+          <h2>🛡️ Club Settings</h2>
+          <p style={{ color: 'var(--color-text-muted)', fontSize: '13px', margin: '10px 0 0 0' }}>
+            {clubStatus.pending_club 
+              ? `Your request to join "${clubStatus.pending_club.name}" (${clubStatus.pending_club.tag}) is currently pending review by club administration.`
+              : "You are not currently a member of any club. You can join or create a club from the \"My Club\" tab."
+            }
+          </p>
+        </div>
+      );
+    }
+  }
+
   // Guard: Link Tag Required
   if (!me?.player_tag) {
     return (
@@ -612,15 +639,17 @@ export default function ClubDashboard({
   return (
     <div className="club-page-wrapper">
       {/* Back to Hub Nav */}
-      <div style={{ marginBottom: '15px' }}>
-        <button 
-          className="btn btn-secondary"
-          onClick={() => navigate('/')}
-          style={{ fontSize: '13px' }}
-        >
-          ◀ Back to Hub
-        </button>
-      </div>
+      {view !== 'settings' && (
+        <div style={{ marginBottom: '15px' }}>
+          <button 
+            className="btn btn-secondary"
+            onClick={() => navigate('/')}
+            style={{ fontSize: '13px' }}
+          >
+            ◀ Back to Hub
+          </button>
+        </div>
+      )}
 
       {/* Alert Banners */}
       {error && <div className="club-alert club-alert-error">❌ {error}</div>}

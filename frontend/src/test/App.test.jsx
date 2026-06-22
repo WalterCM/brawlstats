@@ -313,13 +313,14 @@ describe('Stats Dashboard & Battle Log', () => {
   it('shows battle log section on menu', async () => {
     render(<App />)
     await waitForWelcome()
+    await userEvent.click(screen.getByText('📜 Battle Log'))
     expect(screen.getByText(/my battle log/i)).toBeInTheDocument()
   })
 
   it('shows sync history button', async () => {
     render(<App />)
     await waitForWelcome()
-    expect(screen.getByText(/sync api history/i)).toBeInTheDocument()
+    expect(screen.getByText(/sync battle log/i)).toBeInTheDocument()
   })
 
   it('shows matchup comforts inside draft UI (left panel)', async () => {
@@ -335,7 +336,7 @@ describe('Stats Dashboard & Battle Log', () => {
   it('sync history triggers direct API synchronization', async () => {
     render(<App />)
     await waitForWelcome()
-    await userEvent.click(screen.getByText(/sync api history/i))
+    await userEvent.click(screen.getByText(/sync battle log/i))
     await waitFor(() => { expect(mockApi.syncMatchesAPI).toHaveBeenCalled() })
     expect(await screen.findByText(/Synced 5 matches!/i)).toBeInTheDocument()
   })
@@ -345,6 +346,7 @@ describe('Stats Dashboard & Battle Log', () => {
     await waitForWelcome()
     await userEvent.click(screen.getByText('Stats Dashboard'))
     expect(await screen.findByText(/personal stats dashboard/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Show Filters/i }))
     await userEvent.click(screen.getAllByText(/Gem Grab/i)[1])
     expect(await screen.findByText(/Brawler Performance in Gem Grab/i)).toBeInTheDocument()
   })
