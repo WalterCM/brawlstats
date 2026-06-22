@@ -1913,7 +1913,75 @@ function App() {
           </div>
         </div>
         } />
-        <Route path="/club" element={<ClubDashboard me={me} setMe={setMe} />} />
+        <Route path="/club" element={<Navigate to="/club/roster" replace />} />
+        <Route path="/club/roster" element={
+          <ClubDashboard 
+            me={me} 
+            setMe={setMe} 
+            brawlers={brawlers}
+            allMaps={allMaps}
+            brawlerMeta={brawlerMeta}
+            matches={matches}
+            setMatches={setMatches}
+            perceptions={perceptions}
+            handleSyncHistory={handleSyncHistory}
+            syncingHistory={syncingHistory}
+            minNormalTrophies={minNormalTrophies}
+            enterDraftMode={enterDraftMode}
+            view="roster"
+          />
+        } />
+        <Route path="/club/forum" element={
+          <ClubDashboard 
+            me={me} 
+            setMe={setMe} 
+            brawlers={brawlers}
+            allMaps={allMaps}
+            brawlerMeta={brawlerMeta}
+            matches={matches}
+            setMatches={setMatches}
+            perceptions={perceptions}
+            handleSyncHistory={handleSyncHistory}
+            syncingHistory={syncingHistory}
+            minNormalTrophies={minNormalTrophies}
+            enterDraftMode={enterDraftMode}
+            view="forum"
+          />
+        } />
+        <Route path="/club/settings" element={
+          <ClubDashboard 
+            me={me} 
+            setMe={setMe} 
+            brawlers={brawlers}
+            allMaps={allMaps}
+            brawlerMeta={brawlerMeta}
+            matches={matches}
+            setMatches={setMatches}
+            perceptions={perceptions}
+            handleSyncHistory={handleSyncHistory}
+            syncingHistory={syncingHistory}
+            minNormalTrophies={minNormalTrophies}
+            enterDraftMode={enterDraftMode}
+            view="settings"
+          />
+        } />
+        <Route path="/club/member/:tag" element={
+          <ClubDashboard 
+            me={me} 
+            setMe={setMe} 
+            brawlers={brawlers}
+            allMaps={allMaps}
+            brawlerMeta={brawlerMeta}
+            matches={matches}
+            setMatches={setMatches}
+            perceptions={perceptions}
+            handleSyncHistory={handleSyncHistory}
+            syncingHistory={syncingHistory}
+            minNormalTrophies={minNormalTrophies}
+            enterDraftMode={enterDraftMode}
+            view="member"
+          />
+        } />
         <Route path="/stats" element={
         <StatsDashboard
           matches={matches}
@@ -2041,14 +2109,40 @@ function App() {
               </button>
               
               <button 
-                className="menu-card btn-enter-draft club-dashboard-btn" 
-                onClick={() => navigate('/club')}
+                className="menu-card btn-enter-draft club-roster-btn" 
+                onClick={() => navigate('/club/roster')}
                 style={{ width: '100%', marginTop: '10px' }}
               >
-                <div className="menu-card-icon">🛡️</div>
+                <div className="menu-card-icon">👥</div>
                 <div className="menu-card-details">
-                  <h3>Club & Forum</h3>
-                  <p>Coordinate with your club, check member stats, and post in the forums.</p>
+                  <h3>Club Roster</h3>
+                  <p>View your club mates, role promotions, and link accounts.</p>
+                </div>
+              </button>
+              
+              {me?.is_admin && (
+                <button 
+                  className="menu-card btn-enter-draft club-forum-btn" 
+                  onClick={() => navigate('/club/forum')}
+                  style={{ width: '100%', marginTop: '10px' }}
+                >
+                  <div className="menu-card-icon">💬</div>
+                  <div className="menu-card-details">
+                    <h3>Club Forum</h3>
+                    <p>Post announcements, strategy discussions, and senior restricted threads.</p>
+                  </div>
+                </button>
+              )}
+              
+              <button 
+                className="menu-card btn-enter-draft club-settings-btn" 
+                onClick={() => navigate('/club/settings')}
+                style={{ width: '100%', marginTop: '10px' }}
+              >
+                <div className="menu-card-icon">⚙️</div>
+                <div className="menu-card-details">
+                  <h3>Club Settings</h3>
+                  <p>Configure club parameters and membership options.</p>
                 </div>
               </button>
           </div>

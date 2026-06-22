@@ -34,6 +34,7 @@ class ForumCategory(models.Model):
     club = models.ForeignKey(Club, on_delete=models.CASCADE, related_name='categories', null=True, blank=True)
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
+    restricted_to_seniors = models.BooleanField(default=False)
     
     def __str__(self):
         return f"{self.name} ({self.club.name if self.club else 'Global'})"

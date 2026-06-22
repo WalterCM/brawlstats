@@ -205,8 +205,15 @@ export const api = {
   },
 
   // Fetch match logs history
-  async fetchMatches() {
-    const res = await fetch(`${API_BASE_URL}/matches/`, {
+  async fetchMatches(playerId = null, playerTag = null) {
+    let url = `${API_BASE_URL}/matches/`;
+    const params = [];
+    if (playerId) params.push(`player_id=${playerId}`);
+    if (playerTag) params.push(`player_tag=${encodeURIComponent(playerTag)}`);
+    if (params.length > 0) {
+      url += `?${params.join('&')}`;
+    }
+    const res = await fetch(url, {
       headers: getAuthHeaders()
     });
     if (!res.ok) throw new Error('Failed to fetch match history');

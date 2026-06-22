@@ -593,6 +593,25 @@ class ClubViewSet(viewsets.ModelViewSet):
             'unlinked_players': unlinked_players
         })
 
+def check_is_senior_or_above(player, user=None):
+    if user and (user.is_staff or user.is_superuser):
+        return True
+    
+    if player.supabase_auth_id.startswith('django-user-'):
+        try:
+            from django.contrib.auth.models import User as DjangoUser
+            user_id = int(player.supabase_auth_id.split('-')[-1])
+            if DjangoUser.objects.filter(id=user_id, is_staff=True).exists() or DjangoUser.objects.filter(id=user_id, is_superuser=True).exists():
+                return True
+        except (ValueError, TypeError):
+            pass
+
+    try:
+        membership = player.club_membership
+        return membership.role in ['president', 'vice_president', 'senior']
+    except AttributeError:
+        return False
+
 class ForumCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ForumCategorySerializer
     permission_classes = [IsApprovedClubMember]
@@ -601,7 +620,10 @@ class ForumCategoryViewSet(viewsets.ReadOnlyModelViewSet):
         player = self.request.player
         try:
             club = player.club_membership.club
-            return ForumCategory.objects.filter(club=club)
+            qs = ForumCategory.objects.filter(club=club)
+            if not check_is_senior_or_above(player, self.request.user):
+                qs = qs.filter(restricted_to_seniors=False)
+            return qs
         except AttributeError:
             return ForumCategory.objects.none()
 
@@ -616,6 +638,8 @@ class ForumThreadViewSet(viewsets.ModelViewSet):
         try:
             club = player.club_membership.club
             qs = ForumThread.objects.filter(category__club=club)
+            if not check_is_senior_or_above(player, self.request.user):
+                qs = qs.filter(category__restricted_to_seniors=False)
             if category_id:
                 qs = qs.filter(category_id=category_id)
             return qs.order_by('-created_at')
@@ -628,6 +652,12 @@ class ForumThreadViewSet(viewsets.ModelViewSet):
         # Ensure category belongs to the user's club
         if category.club != player.club_membership.club:
             raise permissions.exceptions.PermissionDenied("Category does not belong to your club.")
+        
+        # Check Senior restrictions
+        if category.restricted_to_seniors:
+            if not check_is_senior_or_above(player, self.request.user):
+                raise permissions.exceptions.PermissionDenied("Only Seniors or above can post in this category.")
+                
         serializer.save(author=player)
 
     def destroy(self, request, *args, **kwargs):
@@ -659,6 +689,8 @@ class ForumReplyViewSet(viewsets.ModelViewSet):
         try:
             club = player.club_membership.club
             qs = ForumReply.objects.filter(thread__category__club=club)
+            if not check_is_senior_or_above(player, self.request.user):
+                qs = qs.filter(thread__category__restricted_to_seniors=False)
             if thread_id:
                 qs = qs.filter(thread_id=thread_id)
             return qs.order_by('created_at')
@@ -671,6 +703,12 @@ class ForumReplyViewSet(viewsets.ModelViewSet):
         # Ensure thread belongs to the user's club
         if thread.category.club != player.club_membership.club:
             raise permissions.exceptions.PermissionDenied("Thread does not belong to your club.")
+            
+        # Check Senior restrictions
+        if thread.category.restricted_to_seniors:
+            if not check_is_senior_or_above(player, self.request.user):
+                raise permissions.exceptions.PermissionDenied("Only Seniors or above can reply in this category.")
+                
         serializer.save(author=player)
 
     def destroy(self, request, *args, **kwargs):

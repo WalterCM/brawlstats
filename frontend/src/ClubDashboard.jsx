@@ -1,10 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from './services/api';
 import './ClubDashboard.css';
+import StatsDashboard from './StatsDashboard';
+import BattleLog from './components/BattleLog';
 
-export default function ClubDashboard({ me, setMe }) {
+export default function ClubDashboard({
+  me,
+  setMe,
+  brawlers = [],
+  allMaps = [],
+  brawlerMeta = [],
+  matches = [],
+  setMatches,
+  perceptions = [],
+  handleSyncHistory,
+  syncingHistory,
+  minNormalTrophies = 750,
+  enterDraftMode,
+  view = 'roster'
+}) {
   const navigate = useNavigate();
+  const { tag } = useParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -30,8 +47,9 @@ export default function ClubDashboard({ me, setMe }) {
   const [syncingRoster, setSyncingRoster] = useState(false);
   const [linkingAccount, setLinkingAccount] = useState(false);
 
-  // Tabs
-  const [activeTab, setActiveTab] = useState('forum'); // 'members', 'forum', 'settings'
+  // Teammate Profile States
+  const [selectedMemberProfileMatches, setSelectedMemberProfileMatches] = useState([]);
+  const [loadingMemberProfile, setLoadingMemberProfile] = useState(false);
 
   // Forum State
   const [categories, setCategories] = useState([]);
@@ -46,10 +64,35 @@ export default function ClubDashboard({ me, setMe }) {
   const [newThreadContent, setNewThreadContent] = useState('');
   const [newReplyContent, setNewReplyContent] = useState('');
 
+
+
   // Initial Load
   useEffect(() => {
     loadClubData();
   }, [me]);
+
+  // Load Teammate Profile Matches on tag/view change
+  useEffect(() => {
+    if (view === 'member' && tag && clubStatus.in_club && clubStatus.club?.members) {
+      const cleanTag = tag.toUpperCase().replace('#', '');
+      const member = clubStatus.club.members.find(
+        m => m.player_tag && m.player_tag.toUpperCase().replace('#', '') === cleanTag
+      );
+      if (member) {
+        setLoadingMemberProfile(true);
+        api.fetchMatches(null, member.player_tag)
+          .then(matchesData => {
+            setSelectedMemberProfileMatches(matchesData);
+          })
+          .catch(err => {
+            console.error("Failed to load teammate matches:", err);
+          })
+          .finally(() => {
+            setLoadingMemberProfile(false);
+          });
+      }
+    }
+  }, [view, tag, clubStatus]);
 
   const loadUnlinkedProfiles = async (clubId) => {
     try {
@@ -499,14 +542,92 @@ export default function ClubDashboard({ me, setMe }) {
   const pendingMembers = club.members.filter(m => !m.is_approved);
   const inactiveMembers = club.members.filter(m => m.is_approved && !m.is_active);
 
+  if (view === 'member') {
+    return (
+      <div className="club-page-wrapper">
+        <div style={{ marginBottom: '15px' }}>
+          <button 
+            className="btn btn-secondary" 
+            onClick={() => navigate('/club/roster')}
+            style={{ fontSize: '13px' }}
+          >
+            ◀ Back to Roster
+          </button>
+        </div>
+
+        {error && <div className="club-alert club-alert-error">❌ {error}</div>}
+        {success && <div className="club-alert club-alert-success">✓ {success}</div>}
+
+        {/* Club Header Panel */}
+        <div className="glass-panel club-header-banner">
+          <div style={{ flex: 1 }}>
+            <span className="club-badge-icon">🛡️</span>
+            <div style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '15px' }}>
+              <h1 className="club-title">{club.name}</h1>
+              <p className="club-meta">Tag: <strong>{club.tag}</strong> | Members: <strong>{approvedMembers.length}</strong> | Your Role: <span className="role-tag">{clubStatus.role.toUpperCase().replace('_', ' ')}</span></p>
+            </div>
+          </div>
+          {club.description && <div className="club-header-desc">"{club.description}"</div>}
+        </div>
+
+        <div className="glass-panel club-panel-section" style={{ marginTop: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', borderBottom: '1px solid var(--border-glass)', paddingBottom: '15px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+              <h2 style={{ margin: 0 }}>
+                👤 Stats: {club.members.find(m => m.player_tag && m.player_tag.toUpperCase().replace('#', '') === (tag ? tag.toUpperCase().replace('#', '') : ''))?.player_name || 'Member'}
+              </h2>
+            </div>
+          </div>
+          {loadingMemberProfile ? (
+            <div className="club-loading-container">
+              <div className="spinner"></div>
+              <p>Loading member data...</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+              <StatsDashboard
+                matches={selectedMemberProfileMatches}
+                perceptions={[]}
+                brawlers={brawlers}
+                allMaps={allMaps}
+                brawlerMeta={brawlerMeta}
+                minNormalTrophies={minNormalTrophies}
+                onClose={() => navigate('/club/roster')}
+              />
+              <div style={{ marginTop: '20px' }}>
+                <BattleLog
+                  matches={selectedMemberProfileMatches}
+                  brawlers={brawlers}
+                  allMaps={allMaps}
+                  isOwnProfile={false}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="club-page-wrapper">
+      {/* Back to Hub Nav */}
+      <div style={{ marginBottom: '15px' }}>
+        <button 
+          className="btn btn-secondary"
+          onClick={() => navigate('/')}
+          style={{ fontSize: '13px' }}
+        >
+          ◀ Back to Hub
+        </button>
+      </div>
+
       {/* Alert Banners */}
       {error && <div className="club-alert club-alert-error">❌ {error}</div>}
       {success && <div className="club-alert club-alert-success">✓ {success}</div>}
 
       {/* Club Header Panel */}
-      <div className="glass-panel club-header-banner">
+      <div className="glass-panel club-header-banner" style={{ marginBottom: '20px' }}>
         <div style={{ flex: 1 }}>
           <span className="club-badge-icon">🛡️</span>
           <div style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '15px' }}>
@@ -517,30 +638,7 @@ export default function ClubDashboard({ me, setMe }) {
         {club.description && <div className="club-header-desc">"{club.description}"</div>}
       </div>
 
-      {/* Tab Navigation */}
-      <div className="club-tab-nav">
-        <button 
-          className={`tab-btn ${activeTab === 'forum' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('forum'); setError(''); }}
-        >
-          💬 Club Forum
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'members' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('members'); setError(''); }}
-        >
-          👥 Roster & Requests {pendingMembers.length > 0 && <span className="notif-dot">{pendingMembers.length}</span>}
-        </button>
-        <button 
-          className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
-          onClick={() => { setActiveTab('settings'); setError(''); }}
-        >
-          ⚙️ Club Settings
-        </button>
-      </div>
-
-      {/* Tab 1: Member Roster & Admin Panel */}
-      {activeTab === 'members' && (
+      {view === 'roster' && (
         <div className="club-members-grid">
           {/* Approved Members List */}
           <div className="glass-panel club-panel-section">
@@ -559,7 +657,17 @@ export default function ClubDashboard({ me, setMe }) {
             </div>
             <div className="roster-list">
               {approvedMembers.map(member => (
-                <div key={member.id} className="roster-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                <div 
+                  key={member.id} 
+                  className={`roster-item ${member.is_linked ? 'roster-item-clickable' : ''}`}
+                  style={{ flexDirection: 'column', alignItems: 'stretch' }}
+                  onClick={() => {
+                    if (member.is_linked && member.player_tag) {
+                      const cleanTag = member.player_tag.replace('#', '');
+                      navigate(`/club/member/${cleanTag}`);
+                    }
+                  }}
+                >
                   <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                     {member.avatar_id ? (
                       <img 
@@ -580,7 +688,8 @@ export default function ClubDashboard({ me, setMe }) {
                         ) : (
                           (isPresident || isVP || me.is_admin) && (
                             <button 
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setLinkingPlayerId(linkingPlayerId === member.player ? null : member.player);
                                 setSelectedUserToLink('');
                               }}
@@ -601,10 +710,13 @@ export default function ClubDashboard({ me, setMe }) {
                       
                       {/* President Controls */}
                       {isPresident && member.player !== me.id && (
-                        <div className="admin-actions">
+                        <div className="admin-actions" onClick={(e) => e.stopPropagation()}>
                           <select 
                             value={member.role} 
-                            onChange={(e) => handleChangeRole(member.player, e.target.value)}
+                            onChange={(e) => {
+                              e.stopPropagation();
+                              handleChangeRole(member.player, e.target.value);
+                            }}
                             className="role-select"
                           >
                             <option value="president">Transfer President</option>
@@ -613,7 +725,10 @@ export default function ClubDashboard({ me, setMe }) {
                             <option value="member">Member</option>
                           </select>
                           <button 
-                            onClick={() => handleRemoveMember(member.player, member.player_name)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveMember(member.player, member.player_name);
+                            }}
                             className="btn btn-sm btn-danger-text"
                             title="Kick Member"
                           >
@@ -625,7 +740,10 @@ export default function ClubDashboard({ me, setMe }) {
                       {/* Vice President Controls (Can only kick seniors and members) */}
                       {isVP && member.player !== me.id && member.role !== 'president' && member.role !== 'vice_president' && (
                         <button 
-                          onClick={() => handleRemoveMember(member.player, member.player_name)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveMember(member.player, member.player_name);
+                          }}
                           className="btn btn-sm btn-danger-text"
                           title="Kick Member"
                         >
@@ -637,7 +755,11 @@ export default function ClubDashboard({ me, setMe }) {
 
                   {/* Inline Link Form for this specific member */}
                   {linkingPlayerId === member.player && (
-                    <div className="inline-link-form" style={{ marginTop: '10px', background: 'rgba(0, 0, 0, 0.3)', padding: '12px', borderRadius: '6px', border: '1px solid #333' }}>
+                    <div 
+                      className="inline-link-form" 
+                      style={{ marginTop: '10px', background: 'rgba(0, 0, 0, 0.3)', padding: '12px', borderRadius: '6px', border: '1px solid #333' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <label style={{ fontSize: '0.8rem', color: '#ccc', display: 'block', marginBottom: '6px' }}>Vincular cuenta web registrada a {member.player_name}:</label>
                       {unlinkedUsers.length === 0 ? (
                         <p style={{ fontSize: '0.8rem', color: '#ff6b6b', margin: '0' }}>No hay cuentas web registradas pendientes de enlace.</p>
@@ -750,208 +872,210 @@ export default function ClubDashboard({ me, setMe }) {
         </div>
       )}
 
-      {/* Tab 2: Club Forum Board */}
-      {activeTab === 'forum' && (
-        <div className="club-forum-grid">
-          {/* Sidebar: Categories */}
-          <div className="glass-panel forum-sidebar">
-            <h3 className="section-title">Categories</h3>
-            <div className="forum-categories-list">
-              {categories.map(cat => (
-                <button
-                  key={cat.id}
-                  className={`category-item-btn ${selectedCategory?.id === cat.id ? 'active' : ''}`}
-                  onClick={() => {
-                    setSelectedCategory(cat);
-                    loadThreads(cat.id);
-                  }}
-                >
-                  <span className="cat-icon">📁</span>
-                  <div className="cat-details">
-                    <div className="cat-name">{cat.name}</div>
-                    <div className="cat-desc">{cat.description}</div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Main Area: Threads or Single Thread View */}
-          <div className="glass-panel forum-main-area">
-            {!selectedThread ? (
-              // ── Threads List View ──
-              <>
-                <div className="forum-section-header">
-                  <div>
-                    <h2>📁 {selectedCategory?.name}</h2>
-                    <p className="subtitle">{selectedCategory?.description}</p>
-                  </div>
-                  <button 
-                    onClick={() => setShowNewThreadForm(!showNewThreadForm)}
-                    className="btn btn-primary"
-                  >
-                    {showNewThreadForm ? 'Cancel' : '📝 Create Thread'}
-                  </button>
-                </div>
-
-                {showNewThreadForm ? (
-                  // New Thread Form
-                  <form onSubmit={handleCreateThread} className="new-thread-form">
-                    <div className="form-group">
-                      <label>Thread Title</label>
-                      <input 
-                        type="text" 
-                        placeholder="What's on your mind?"
-                        value={newThreadTitle}
-                        onChange={(e) => setNewThreadTitle(e.target.value)}
-                        required
-                        maxLength="150"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Content Description</label>
-                      <textarea
-                        rows="5"
-                        placeholder="Write your details here..."
-                        value={newThreadContent}
-                        onChange={(e) => setNewThreadContent(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <button type="submit" className="btn btn-primary">Post Thread</button>
-                  </form>
-                ) : (
-                  // Threads List
-                  <div className="threads-list">
-                    {threads.length === 0 ? (
-                      <div className="empty-state">
-                        <p>No threads posted in this category yet. Be the first!</p>
-                      </div>
-                    ) : (
-                      threads.map(thread => (
-                        <div 
-                          key={thread.id} 
-                          className="thread-list-item"
-                          onClick={() => {
-                            setSelectedThread(thread);
-                            loadReplies(thread.id);
-                          }}
-                        >
-                          <div style={{ flex: 1 }}>
-                            <h4 className="thread-title">{thread.title}</h4>
-                            <div className="thread-meta">
-                              By <strong>{thread.author_name}</strong> | {new Date(thread.created_at).toLocaleDateString()}
-                            </div>
-                          </div>
-                          <div className="thread-replies-badge">
-                            💬 {thread.replies_count}
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-              </>
-            ) : (
-              // ── Single Thread View ──
-              <div className="single-thread-view">
-                <button 
-                  className="btn btn-sm btn-secondary" 
-                  onClick={() => setSelectedThread(null)}
-                  style={{ marginBottom: '15px' }}
-                >
-                  ← Back to threads
-                </button>
-
-                <div className="thread-main-post">
-                  <div className="post-header">
-                    {selectedThread.author_avatar_id ? (
-                      <img 
-                        src={`https://cdn.brawlify.com/profile-icons/regular/${selectedThread.author_avatar_id}.png`} 
-                        alt="" 
-                        className="post-avatar"
-                      />
-                    ) : (
-                      <div className="post-avatar-fallback">👤</div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{selectedThread.title}</h2>
-                      <div className="post-meta">
-                        By <strong>{selectedThread.author_name}</strong> ({selectedThread.author_tag}) | {new Date(selectedThread.created_at).toLocaleString()}
-                      </div>
-                    </div>
-                    {(selectedThread.author === me.id || isAdmin) && (
-                      <button 
-                        onClick={() => handleDeleteThread(selectedThread.id)}
-                        className="btn btn-sm btn-danger"
+      {view === 'forum' && me.is_admin && (
+              <div className="club-forum-grid">
+                {/* Sidebar: Categories */}
+                <div className="glass-panel forum-sidebar">
+                  <h3 className="section-title">Categories</h3>
+                  <div className="forum-categories-list">
+                    {categories.map(cat => (
+                      <button
+                        key={cat.id}
+                        className={`category-item-btn ${selectedCategory?.id === cat.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setSelectedCategory(cat);
+                          loadThreads(cat.id);
+                        }}
                       >
-                        Delete
+                        <span className="cat-icon">{cat.restricted_to_seniors ? '🔒' : '📁'}</span>
+                        <div className="cat-details">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span className="cat-name">{cat.name}</span>
+                            {cat.restricted_to_seniors && (
+                              <span style={{ fontSize: '9px', background: 'rgba(255, 0, 85, 0.15)', color: 'var(--color-enemy)', padding: '1px 4px', borderRadius: '3px', fontWeight: '800' }}>
+                                SENIORS
+                              </span>
+                            )}
+                          </div>
+                          <div className="cat-desc">{cat.description}</div>
+                        </div>
                       </button>
-                    )}
-                  </div>
-                  <div className="post-body">
-                    {selectedThread.content}
+                    ))}
                   </div>
                 </div>
 
-                {/* Replies Section */}
-                <div className="replies-section">
-                  <h3>Replies ({replies.length})</h3>
-                  <div className="replies-list">
-                    {replies.map(reply => (
-                      <div key={reply.id} className="reply-item">
-                        <div className="reply-header">
-                          {reply.author_avatar_id ? (
+                {/* Main Area: Threads or Single Thread View */}
+                <div className="glass-panel forum-main-area">
+                  {!selectedThread ? (
+                    <>
+                      <div className="forum-section-header">
+                        <div>
+                          <h2>📁 {selectedCategory?.name || 'Select Category'}</h2>
+                          <p className="subtitle">{selectedCategory?.description}</p>
+                        </div>
+                        {selectedCategory && (
+                          <button 
+                            onClick={() => setShowNewThreadForm(!showNewThreadForm)}
+                            className="btn btn-primary"
+                          >
+                            {showNewThreadForm ? 'Cancel' : '📝 Create Thread'}
+                          </button>
+                        )}
+                      </div>
+
+                      {showNewThreadForm ? (
+                        <form onSubmit={handleCreateThread} className="new-thread-form">
+                          <div className="form-group">
+                            <label>Thread Title</label>
+                            <input 
+                              type="text" 
+                              placeholder="What's on your mind?"
+                              value={newThreadTitle}
+                              onChange={(e) => setNewThreadTitle(e.target.value)}
+                              required
+                              maxLength="150"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Content Description</label>
+                            <textarea
+                              rows="5"
+                              placeholder="Write your details here..."
+                              value={newThreadContent}
+                              onChange={(e) => setNewThreadContent(e.target.value)}
+                              required
+                            />
+                          </div>
+                          <button type="submit" className="btn btn-primary">Post Thread</button>
+                        </form>
+                      ) : (
+                        <div className="threads-list">
+                          {threads.length === 0 ? (
+                            <div className="empty-state">
+                              <p>No threads posted in this category yet. Be the first!</p>
+                            </div>
+                          ) : (
+                            threads.map(thread => (
+                              <div 
+                                key={thread.id} 
+                                className="thread-list-item"
+                                onClick={() => {
+                                  setSelectedThread(thread);
+                                  loadReplies(thread.id);
+                                }}
+                              >
+                                <div style={{ flex: 1 }}>
+                                  <h4 className="thread-title">{thread.title}</h4>
+                                  <div className="thread-meta">
+                                    By <strong>{thread.author_name}</strong> | {new Date(thread.created_at).toLocaleDateString()}
+                                  </div>
+                                </div>
+                                <div className="thread-replies-badge">
+                                  💬 {thread.replies_count}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="single-thread-view">
+                      <button 
+                        className="btn btn-sm btn-secondary" 
+                        onClick={() => setSelectedThread(null)}
+                        style={{ marginBottom: '15px' }}
+                      >
+                        ← Back to threads
+                      </button>
+
+                      <div className="thread-main-post">
+                        <div className="post-header">
+                          {selectedThread.author_avatar_id ? (
                             <img 
-                              src={`https://cdn.brawlify.com/profile-icons/regular/${reply.author_avatar_id}.png`} 
+                              src={`https://cdn.brawlify.com/profile-icons/regular/${selectedThread.author_avatar_id}.png`} 
                               alt="" 
-                              className="reply-avatar"
+                              className="post-avatar"
                             />
                           ) : (
-                            <div className="reply-avatar-fallback">👤</div>
+                            <div className="post-avatar-fallback">👤</div>
                           )}
                           <div style={{ flex: 1 }}>
-                            <strong>{reply.author_name}</strong> <span className="reply-tag">{reply.author_tag}</span>
-                            <span className="reply-time">{new Date(reply.created_at).toLocaleString()}</span>
+                            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{selectedThread.title}</h2>
+                            <div className="post-meta">
+                              By <strong>{selectedThread.author_name}</strong> ({selectedThread.author_tag}) | {new Date(selectedThread.created_at).toLocaleString()}
+                            </div>
                           </div>
-                          {(reply.author === me.id || isAdmin) && (
+                          {(selectedThread.author === me.id || isAdmin) && (
                             <button 
-                              onClick={() => handleDeleteReply(reply.id)}
-                              className="btn btn-sm btn-danger-text"
+                              onClick={() => handleDeleteThread(selectedThread.id)}
+                              className="btn btn-sm btn-danger"
                             >
                               Delete
                             </button>
                           )}
                         </div>
-                        <div className="reply-body">
-                          {reply.content}
+                        <div className="post-body">
+                          {selectedThread.content}
                         </div>
                       </div>
-                    ))}
-                  </div>
 
-                  {/* Add Reply Form */}
-                  <form onSubmit={handleCreateReply} className="reply-form">
-                    <textarea
-                      rows="3"
-                      placeholder="Post a reply..."
-                      value={newReplyContent}
-                      onChange={(e) => setNewReplyContent(e.target.value)}
-                      required
-                    />
-                    <button type="submit" className="btn btn-primary" style={{ marginTop: '10px' }}>
-                      Reply
-                    </button>
-                  </form>
+                      <div className="replies-section">
+                        <h3>Replies ({replies.length})</h3>
+                        <div className="replies-list">
+                          {replies.map(reply => (
+                            <div key={reply.id} className="reply-item">
+                              <div className="reply-header">
+                                {reply.author_avatar_id ? (
+                                  <img 
+                                    src={`https://cdn.brawlify.com/profile-icons/regular/${reply.author_avatar_id}.png`} 
+                                    alt="" 
+                                    className="reply-avatar"
+                                  />
+                                ) : (
+                                  <div className="reply-avatar-fallback">👤</div>
+                                )}
+                                <div style={{ flex: 1 }}>
+                                  <strong>{reply.author_name}</strong> <span className="reply-tag">{reply.author_tag}</span>
+                                  <span className="reply-time">{new Date(reply.created_at).toLocaleString()}</span>
+                                </div>
+                                {(reply.author === me.id || isAdmin) && (
+                                  <button 
+                                    onClick={() => handleDeleteReply(reply.id)}
+                                    className="btn btn-sm btn-danger-text"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                              <div className="reply-body">
+                                {reply.content}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <form onSubmit={handleCreateReply} className="reply-form">
+                          <textarea
+                            rows="3"
+                            placeholder="Post a reply..."
+                            value={newReplyContent}
+                            onChange={(e) => setNewReplyContent(e.target.value)}
+                            required
+                          />
+                          <button type="submit" className="btn btn-primary" style={{ marginTop: '10px' }}>
+                            Reply
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
-        </div>
       )}
 
       {/* Tab 3: Club Settings */}
-      {activeTab === 'settings' && (
+      {view === 'settings' && (
         <div className="glass-panel club-panel-section" style={{ maxWidth: '600px', margin: '0 auto' }}>
           <h2>⚙️ Club Management & Settings</h2>
           <p className="subtitle">Configure your club options or leave the club below.</p>
