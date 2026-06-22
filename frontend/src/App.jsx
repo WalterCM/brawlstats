@@ -105,9 +105,8 @@ function App() {
   const [linkingMatchId, setLinkingMatchId] = useState(null);
   const [syncingHistory, setSyncingHistory] = useState(false);
   const [submittingMatch, setSubmittingMatch] = useState(false);
-  const [syncPreview, setSyncPreview] = useState([]);
-  const [showSyncModal, setShowSyncModal] = useState(false);
-  const [selectedBattles, setSelectedBattles] = useState(new Set());
+  const [ratingMatchId, setRatingMatchId] = useState(null);
+
 
   const [minNormalTrophies, setMinNormalTrophies] = useState(750);
   const [suggestionTrophyThreshold, setSuggestionTrophyThreshold] = useState(1000);
@@ -617,33 +616,12 @@ function App() {
   const handleSyncHistory = async () => {
     setSyncingHistory(true);
     try {
-      const res = await api.fetchSyncPreview();
-      const reversed = [...(res.available || [])].reverse();
-      setSyncPreview(reversed);
-      setSelectedBattles(new Set(reversed.map(b => b.battle_time)));
-      setShowSyncModal(true);
-    } catch (err) {
-      console.error(err);
-      triggerAlert("Sync Preview Failed", err.message || "Failed to fetch available battles.", "error");
-    } finally {
-      setSyncingHistory(false);
-    }
-  };
-
-  const handleSyncImport = async () => {
-    const battleTimes = Array.from(selectedBattles);
-    if (battleTimes.length === 0) return;
-    setSyncingHistory(true);
-    try {
-      const res = await api.importSelectedBattles(battleTimes);
-      triggerAlert("Import Successful", res.message || `Successfully imported ${res.synced_count || 0} match(es)!`, "success");
+      const res = await api.syncMatchesAPI();
+      triggerAlert("Sync Successful", res.message || `Successfully synchronized ${res.synced_count || 0} match(es)!`, "success");
       await loadUserStats();
-      setShowSyncModal(false);
-      setSyncPreview([]);
-      setSelectedBattles(new Set());
     } catch (err) {
       console.error(err);
-      triggerAlert("Import Failed", err.message || "Failed to import selected battles.", "error");
+      triggerAlert("Sync Failed", err.message || "Failed to synchronize matches from API.", "error");
     } finally {
       setSyncingHistory(false);
     }
@@ -1302,93 +1280,73 @@ function App() {
                 </div>
                 <div className="match-list">
                   {displayedMatches.slice(0, 5).map((m) => (
-                    <div key={m.id} className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', fontSize: '11px', marginBottom: '6px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-glass)' }}>
-                      {<MatchTeamsBanner match={m} brawlers={brawlers} />}
-                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span className="map-name" style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text)' }}>
-                            {getMapName(allMaps, m.map_id)}
+                    <div key={m.id} style={{ display: 'flex', flexDirection: 'column', marginBottom: '6px' }}>
+                      <div className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', fontSize: '11px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-glass)' }}>
+                        {<MatchTeamsBanner match={m} brawlers={brawlers} />}
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span className="map-name" style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text)' }}>
+                              {getMapName(allMaps, m.map_id)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                            <span style={{ textTransform: 'capitalize' }}>{getModeIcon(m.mode)} {m.mode}</span>
+                            <span>•</span>
+                            <span>{getBrawlerName(brawlers, m.my_brawler_id)}</span>
+                            {m.my_brawler_trophies != null && (
+                              <>
+                                <span>•</span>
+                                {m.draft_type === 'ranked' ? (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    {getRankIconUrl(m.my_brawler_trophies) && (
+                                      <img src={getRankIconUrl(m.my_brawler_trophies)} alt="" style={{ width: 12, height: 12 }} />
+                                    )}
+                                    {getRankById(m.my_brawler_trophies)?.name || m.my_brawler_trophies}
+                                  </span>
+                                ) : (
+                                  <span>{m.my_brawler_trophies}🏆</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {!m.api_match_id && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (confirm("Do you want to link this match with your latest unlinked game from the Brawl Stars API?")) {
+                                  try {
+                                    await api.linkMatchAPI(m.id);
+                                    triggerAlert("Link Successful", "Match linked successfully with Brawl Stars API match ID!", "success");
+                                    loadUserStats();
+                                  } catch (err) {
+                                    triggerAlert("Link Failed", err.message || "Failed to link match with API.", "error");
+                                  }
+                                }
+                              }}
+                              style={{
+                                background: 'rgba(0, 229, 255, 0.1)',
+                                border: '1px solid rgba(0, 229, 255, 0.3)',
+                                color: 'var(--color-ally)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                padding: '2px 6px',
+                                fontSize: '9px',
+                                fontWeight: '600',
+                                transition: 'all 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 229, 255, 0.2)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0, 229, 255, 0.1)'}
+                              title="Link this match with the official Brawl Stars API game ID"
+                            >
+                              🔗 Link API
+                            </button>
+                          )}
+                          <span className="result-badge" style={{ fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', background: m.result === 'victory' ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,127,0.15)', color: m.result === 'victory' ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
+                            {m.result === 'victory' ? 'WIN' : 'LOSS'}
                           </span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-text-muted)' }}>
-                          <span style={{ textTransform: 'capitalize' }}>{getModeIcon(m.mode)} {m.mode}</span>
-                          <span>•</span>
-                          <span>{getBrawlerName(brawlers, m.my_brawler_id)}</span>
-                          {m.my_brawler_trophies != null && (
-                            <>
-                              <span>•</span>
-                              {m.draft_type === 'ranked' ? (
-                                <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                  {getRankIconUrl(m.my_brawler_trophies) && (
-                                    <img src={getRankIconUrl(m.my_brawler_trophies)} alt="" style={{ width: 12, height: 12 }} />
-                                  )}
-                                  {getRankById(m.my_brawler_trophies)?.name || m.my_brawler_trophies}
-                                </span>
-                              ) : (
-                                <span>{m.my_brawler_trophies}🏆</span>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {!m.api_match_id && (
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              if (confirm("Do you want to link this match with your latest unlinked game from the Brawl Stars API?")) {
-                                try {
-                                  await api.linkMatchAPI(m.id);
-                                  triggerAlert("Link Successful", "Match linked successfully with Brawl Stars API match ID!", "success");
-                                  loadUserStats();
-                                } catch (err) {
-                                  triggerAlert("Link Failed", err.message || "Failed to link match with API.", "error");
-                                }
-                              }
-                            }}
-                            style={{
-                              background: 'rgba(0, 229, 255, 0.1)',
-                              border: '1px solid rgba(0, 229, 255, 0.3)',
-                              color: 'var(--color-ally)',
-                              borderRadius: '4px',
-                              cursor: 'pointer',
-                              padding: '2px 6px',
-                              fontSize: '9px',
-                              fontWeight: '600',
-                              transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(0, 229, 255, 0.2)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0, 229, 255, 0.1)'}
-                            title="Link this match with the official Brawl Stars API game ID"
-                          >
-                            🔗 Link API
-                          </button>
-                        )}
-                        <span className="result-badge" style={{ fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', background: m.result === 'victory' ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,127,0.15)', color: m.result === 'victory' ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
-                          {m.result === 'victory' ? 'WIN' : 'LOSS'}
-                        </span>
-                        <button
-                          className="btn-edit-match"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            startEditMatch(m);
-                          }}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--color-text-muted)',
-                            cursor: 'pointer',
-                            padding: '2px 4px',
-                            fontSize: '11px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'color 0.2s',
-                          }}
-                          title="Edit match data"
-                        >
-                          ✏️
-                        </button>
                       </div>
                     </div>
                   ))}
@@ -2115,6 +2073,7 @@ function App() {
                 >
                   {syncingHistory ? 'Syncing...' : '🔄 Sync API History'}
                 </button>
+                {/* 
                 <button
                   className="btn btn-sm"
                   onClick={ingestLastBattle}
@@ -2130,6 +2089,7 @@ function App() {
                 >
                   {ingesting ? 'Ingesting...' : '⚡ Ingest Last Battle'}
                 </button>
+                */}
                 <button 
                   className="btn btn-sm btn-secondary"
                   onClick={loadUserStats}
@@ -2165,110 +2125,202 @@ function App() {
                   const bName = getBrawlerName(brawlers, m.my_brawler_id).toLowerCase();
                   return bName.includes(searchQuery.toLowerCase());
                 })
-                .map((m) => (
-                  <div 
-                    key={m.id} 
-                    className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`} 
-                    style={{ 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      gap: '8px', 
-                      padding: '8px 10px', 
-                      fontSize: '11px', 
-                      marginBottom: '8px', 
-                      borderRadius: '6px', 
-                      background: 'rgba(255, 255, 255, 0.03)', 
-                      border: '1px solid var(--border-glass)' 
-                    }}
-                  >
-                    {<MatchTeamsBanner match={m} brawlers={brawlers} />}
-                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span className="map-name" style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text)' }}>
-                          {getMapName(allMaps, m.map_id)}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-text-muted)' }}>
-                        <span style={{ textTransform: 'capitalize' }}>{getModeIcon(m.mode)} {m.mode}</span>
-                        <span>•</span>
-                        <span>{getBrawlerName(brawlers, m.my_brawler_id)}</span>
-                        <span>•</span>
-                        <span style={{ textTransform: 'capitalize', color: m.draft_type === 'ranked' ? 'var(--color-ally)' : 'var(--color-text-muted)' }}>
-                          {m.draft_type}
-                        </span>
-                        {m.my_brawler_trophies != null && (
-                          <>
-                            <span>•</span>
-                            {m.draft_type === 'ranked' ? (
-                              <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                {getRankIconUrl(m.my_brawler_trophies) && (
-                                  <img src={getRankIconUrl(m.my_brawler_trophies)} alt="" style={{ width: 12, height: 12 }} />
-                                )}
-                                {getRankById(m.my_brawler_trophies)?.name || m.my_brawler_trophies}
-                              </span>
-                            ) : (
-                              <span>{m.my_brawler_trophies}🏆</span>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className="result-badge" style={{ fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', background: m.result === 'victory' ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,127,0.15)', color: m.result === 'victory' ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
-                        {m.result === 'victory' ? 'WIN' : 'LOSS'}
-                      </span>
-                      {!m.api_match_id && (
-                        <button
-                          className="btn btn-sm btn-secondary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleLinkMatchAPI(m.id);
-                          }}
-                          disabled={linkingMatchId === m.id}
-                          style={{
-                            background: 'linear-gradient(135deg, #4caf50 0%, #2e7d32 100%)',
-                            borderColor: '#2e7d32',
-                            color: '#fff',
-                            padding: '4px 6px',
-                            fontSize: '11px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            borderRadius: '4px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          {linkingMatchId === m.id ? 'Linking...' : '🔗 Link'}
-                        </button>
-                      )}
-                      <button
-                        className="btn-edit-match"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          startEditMatch(m);
+                .map((m) => {
+                  const isRatingOpen = ratingMatchId === m.id;
+                  const enemyPicks = m.draft_events?.filter(e => e.team === 'enemy' && e.type === 'pick') || [];
+                  return (
+                    <div key={m.id} style={{ display: 'flex', flexDirection: 'column', marginBottom: '8px' }}>
+                      <div 
+                        className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`} 
+                        style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          gap: '8px', 
+                          padding: '8px 10px', 
+                          fontSize: '11px', 
+                          borderRadius: '6px', 
+                          background: 'rgba(255, 255, 255, 0.03)', 
+                          border: '1px solid var(--border-glass)' 
                         }}
-                        style={{
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid var(--border-glass)',
-                          borderRadius: '4px',
-                          color: '#fff',
-                          cursor: 'pointer',
-                          padding: '4px 6px',
-                          fontSize: '11px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'all 0.2s',
-                        }}
-                        title="Edit match data & perceptions"
                       >
-                        ✏️ Edit
-                      </button>
+                        {<MatchTeamsBanner match={m} brawlers={brawlers} />}
+                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span className="map-name" style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text)' }}>
+                              {getMapName(allMaps, m.map_id)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                            <span style={{ textTransform: 'capitalize' }}>{getModeIcon(m.mode)} {m.mode}</span>
+                            <span>•</span>
+                            <span>{getBrawlerName(brawlers, m.my_brawler_id)}</span>
+                            <span>•</span>
+                            <span style={{ textTransform: 'capitalize', color: m.draft_type === 'ranked' ? 'var(--color-ally)' : 'var(--color-text-muted)' }}>
+                              {m.draft_type}
+                            </span>
+                            {m.my_brawler_trophies != null && (
+                              <>
+                                <span>•</span>
+                                {m.draft_type === 'ranked' ? (
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    {getRankIconUrl(m.my_brawler_trophies) && (
+                                      <img src={getRankIconUrl(m.my_brawler_trophies)} alt="" style={{ width: 12, height: 12 }} />
+                                    )}
+                                    {getRankById(m.my_brawler_trophies)?.name || m.my_brawler_trophies}
+                                  </span>
+                                ) : (
+                                  <span>{m.my_brawler_trophies}🏆</span>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {enemyPicks.length > 0 && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setRatingMatchId(isRatingOpen ? null : m.id);
+                              }}
+                              style={{
+                                background: isRatingOpen ? 'rgba(0, 229, 255, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                color: 'var(--color-text)',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                padding: '4px 6px',
+                                fontSize: '11px',
+                                fontWeight: '600',
+                                transition: 'all 0.2s'
+                              }}
+                              title="Rate matchups"
+                            >
+                              {isRatingOpen ? '✖ Close' : '⚡ Rate'}
+                            </button>
+                          )}
+                          <span className="result-badge" style={{ fontSize: '9px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', background: m.result === 'victory' ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,127,0.15)', color: m.result === 'victory' ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
+                            {m.result === 'victory' ? 'WIN' : 'LOSS'}
+                          </span>
+                          {!m.api_match_id && (
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleLinkMatchAPI(m.id);
+                              }}
+                              disabled={linkingMatchId === m.id}
+                              style={{
+                                background: 'linear-gradient(135deg, #4caf50 0%, #2e7d32 100%)',
+                                borderColor: '#2e7d32',
+                                color: '#fff',
+                                padding: '4px 6px',
+                                fontSize: '11px',
+                                fontWeight: '600',
+                                cursor: 'pointer',
+                                borderRadius: '4px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                            >
+                              {linkingMatchId === m.id ? 'Linking...' : '🔗 Link'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {isRatingOpen && (
+                        <div style={{
+                          background: 'rgba(255, 255, 255, 0.01)',
+                          border: '1px solid var(--border-glass)',
+                          borderTop: 'none',
+                          borderBottomLeftRadius: '6px',
+                          borderBottomRightRadius: '6px',
+                          padding: '10px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          marginTop: '-8px',
+                          zIndex: 1,
+                          marginBottom: '8px'
+                        }}>
+                          <div style={{ fontWeight: '600', fontSize: '10px', color: 'var(--color-text-muted)' }}>
+                            Rate matchup comfort as {getBrawlerName(brawlers, m.my_brawler_id)}:
+                          </div>
+                          {enemyPicks.map(enemy => {
+                            const enemyId = enemy.brawler_id;
+                            const currentValue = m.perceptions?.[enemyId] ?? 0;
+                            const avatar = getBrawlerAvatar(brawlers, enemyId);
+                            
+                            return (
+                              <div key={enemyId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: '100px' }}>
+                                  {avatar ? (
+                                    <img src={avatar} alt="" style={{ width: '18px', height: '18px', borderRadius: '4px' }} />
+                                  ) : (
+                                    <div style={{ width: '18px', height: '18px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)' }} />
+                                  )}
+                                  <span style={{ fontWeight: '500', fontSize: '10px' }}>{getBrawlerName(brawlers, enemyId)}</span>
+                                </div>
+                                
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                  {[
+                                    { label: 'Easy', val: 1, color: 'rgba(0, 229, 255, 0.1)', activeColor: 'rgba(0, 229, 255, 0.7)' },
+                                    { label: 'Neutral', val: 0, color: 'rgba(255, 255, 255, 0.05)', activeColor: 'rgba(255, 255, 255, 0.25)' },
+                                    { label: 'Hard', val: -1, color: 'rgba(255, 0, 85, 0.1)', activeColor: 'rgba(255, 0, 85, 0.7)' },
+                                    { label: 'Counter', val: -2, color: 'rgba(180, 0, 85, 0.15)', activeColor: 'rgba(255, 0, 0, 0.8)' }
+                                  ].map(opt => {
+                                    const isActive = currentValue === opt.val;
+                                    return (
+                                      <button
+                                        key={opt.val}
+                                        onClick={async () => {
+                                          try {
+                                            await api.savePerception(m.id, m.my_brawler_id, enemyId, opt.val);
+                                            setMatches(prev => prev.map(match => {
+                                              if (match.id === m.id) {
+                                                const nextPerceptions = { ...match.perceptions };
+                                                if (opt.val === 0) {
+                                                  delete nextPerceptions[enemyId];
+                                                } else {
+                                                  nextPerceptions[enemyId] = opt.val;
+                                                }
+                                                return { ...match, perceptions: nextPerceptions };
+                                              }
+                                              return match;
+                                            }));
+                                            const updatedPerceptions = await api.fetchPerceptions();
+                                            setPerceptions(updatedPerceptions);
+                                          } catch (err) {
+                                            triggerAlert("Perception Failed", "Failed to save matchup rating.", "error");
+                                          }
+                                        }}
+                                        style={{
+                                          fontSize: '9px',
+                                          padding: '2px 6px',
+                                          cursor: 'pointer',
+                                          border: '1px solid var(--border-glass)',
+                                          borderRadius: '3px',
+                                          background: isActive ? opt.activeColor : opt.color,
+                                          color: isActive ? '#fff' : 'var(--color-text-muted)',
+                                          fontWeight: isActive ? '600' : 'normal',
+                                          transition: 'all 0.15s'
+                                        }}
+                                      >
+                                        {opt.label}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               {matches.length === 0 && <p className="empty-msg" style={{ textAlign: 'center', color: 'var(--color-text-muted)' }}>No matches logged yet.</p>}
             </div>
           </div>
@@ -2419,99 +2471,7 @@ function App() {
         onClose={() => setShowHomeMapBrowser(false)}
       />
 
-      {/* Sync Preview Modal */}
-      {showSyncModal && (
-        <div className="modal-backdrop" onClick={() => setShowSyncModal(false)}>
-          <div className="glass-panel" style={{ width: '560px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', padding: '24px' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-              <h3 style={{ margin: 0 }}>📜 Select Battles to Import</h3>
-              <span style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>
-                {selectedBattles.size} of {syncPreview.length} selected
-              </span>
-            </div>
-            <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 12px' }}>
-              Found {syncPreview.length} new battle{syncPreview.length !== 1 ? 's' : ''} in your Brawl Stars API log.
-            </p>
 
-            <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
-              <button className="btn btn-sm" onClick={() => setSelectedBattles(new Set(syncPreview.map(b => b.battle_time)))}>
-                Select All
-              </button>
-              <button className="btn btn-sm" onClick={() => setSelectedBattles(new Set())}>
-                Deselect All
-              </button>
-            </div>
-
-            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {syncPreview.map(b => {
-                const isSelected = selectedBattles.has(b.battle_time);
-                const brawlerAvatar = getBrawlerAvatar(brawlers, b.brawler_id);
-                return (
-                  <div
-                    key={b.battle_time}
-                    className="mp-suggestion-row"
-                    style={{
-                      cursor: 'pointer',
-                      border: `1px solid ${isSelected ? 'var(--color-ally)' : 'var(--border-glass)'}`,
-                      background: isSelected ? 'rgba(0,229,255,0.04)' : 'rgba(255,255,255,0.02)',
-                    }}
-                    onClick={() => {
-                      const next = new Set(selectedBattles);
-                      if (isSelected) next.delete(b.battle_time);
-                      else next.add(b.battle_time);
-                      setSelectedBattles(next);
-                    }}
-                  >
-                    <input type="checkbox" checked={isSelected} onChange={() => {}} style={{ marginRight: '6px', accentColor: 'var(--color-ally)' }} />
-
-                    {brawlerAvatar
-                      ? <img src={brawlerAvatar} alt={b.brawler_name} className="mp-sug-avatar" />
-                      : <div className="mp-sug-avatar-ph" />
-                    }
-
-                    <div className="mp-sug-info" style={{ flex: 1, minWidth: 0 }}>
-                      <span className="mp-sug-name">{b.brawler_name}</span>
-                      <span className="mp-sug-class">{b.map_name}</span>
-                    </div>
-
-                    <span className="mp-match-result-badge" style={{
-                      background: b.result === 'victory' ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,85,0.15)',
-                      color: b.result === 'victory' ? 'var(--color-ally)' : 'var(--color-enemy)',
-                      fontSize: '10px', padding: '2px 7px',
-                    }}>
-                      {b.result === 'victory' ? 'WIN' : 'LOSS'}
-                    </span>
-
-                    <span style={{ fontSize: '9px', color: 'var(--color-text-muted)', flexShrink: 0 }}>
-                      {b.draft_type === 'ranked'
-                        ? `🏅 ${getRankById(b.trophies)?.name || b.trophies}`
-                        : `🎮 ${b.trophies}🏆`}
-                    </span>
-                  </div>
-                );
-              })}
-              {syncPreview.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '30px', color: 'var(--color-text-muted)', fontSize: '13px' }}>
-                  No new battles available.
-                </div>
-              )}
-            </div>
-
-            <div className="modal-actions" style={{ marginTop: '14px', borderTop: '1px solid var(--border-glass)', paddingTop: '14px' }}>
-              <button className="btn" onClick={() => { setShowSyncModal(false); setSyncPreview([]); setSelectedBattles(new Set()); }}>
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleSyncImport}
-                disabled={syncingHistory || selectedBattles.size === 0}
-              >
-                {syncingHistory ? 'Importing...' : `Import Selected (${selectedBattles.size})`}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <AlertModal
         isOpen={modalAlert.isOpen}

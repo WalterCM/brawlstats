@@ -19,11 +19,15 @@ class MatchSerializer(serializers.ModelSerializer):
         queryset=Brawler.objects.all(), source='my_brawler', required=False, allow_null=True
     )
     draft_events = DraftEventSerializer(many=True, required=False)
+    perceptions = serializers.SerializerMethodField()
 
     class Meta:
         model = Match
-        fields = ['id', 'map_id', 'my_brawler_id', 'mode', 'result', 'draft_type', 'date', 'draft_events', 'api_match_id', 'my_brawler_trophies', 'is_star_player']
+        fields = ['id', 'map_id', 'my_brawler_id', 'mode', 'result', 'draft_type', 'date', 'draft_events', 'api_match_id', 'my_brawler_trophies', 'is_star_player', 'perceptions']
         read_only_fields = ['id', 'date']
+
+    def get_perceptions(self, obj):
+        return {p.brawler_rival_id: p.value for p in obj.perceptions.all()}
 
     def create(self, validated_data):
         draft_events_data = validated_data.pop('draft_events', [])

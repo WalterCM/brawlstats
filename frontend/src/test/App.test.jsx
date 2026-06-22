@@ -1,7 +1,18 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { render as tlRender, screen, waitFor, within } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { FilterProvider } from '../context/FilterContext'
 import userEvent from '@testing-library/user-event'
 import App from '../App'
+
+const AllProviders = ({ children }) => (
+  <MemoryRouter>
+    <FilterProvider>
+      {children}
+    </FilterProvider>
+  </MemoryRouter>
+)
+const render = (ui, options) => tlRender(ui, { wrapper: AllProviders, ...options })
 
 vi.setConfig({ testTimeout: 15000 })
 
@@ -305,11 +316,10 @@ describe('Stats Dashboard & Battle Log', () => {
     expect(screen.getByText(/my battle log/i)).toBeInTheDocument()
   })
 
-  it('shows sync and ingest buttons', async () => {
+  it('shows sync history button', async () => {
     render(<App />)
     await waitForWelcome()
     expect(screen.getByText(/sync api history/i)).toBeInTheDocument()
-    expect(screen.getByText(/ingest last battle/i)).toBeInTheDocument()
   })
 
   it('shows matchup comforts inside draft UI (left panel)', async () => {
@@ -322,19 +332,12 @@ describe('Stats Dashboard & Battle Log', () => {
     expect(screen.getByText('Easy')).toBeInTheDocument()
   })
 
-  it('ingest last battle calls API', async () => {
-    render(<App />)
-    await waitForWelcome()
-    await userEvent.click(screen.getByText(/ingest last battle/i))
-    await waitFor(() => { expect(mockApi.fetchLastBattle).toHaveBeenCalled() })
-  })
-
-  it('sync history shows modal with available battles', async () => {
+  it('sync history triggers direct API synchronization', async () => {
     render(<App />)
     await waitForWelcome()
     await userEvent.click(screen.getByText(/sync api history/i))
-    await waitFor(() => { expect(mockApi.fetchSyncPreview).toHaveBeenCalled() })
-    await waitFor(() => { expect(screen.getByText(/select battles to import/i)).toBeInTheDocument() })
+    await waitFor(() => { expect(mockApi.syncMatchesAPI).toHaveBeenCalled() })
+    expect(await screen.findByText(/Synced 5 matches!/i)).toBeInTheDocument()
   })
 
   it('navigates to mode profile from dashboard', async () => {
@@ -555,9 +558,11 @@ describe('Map Selector', () => {
     await navigateToDraft()
     await userEvent.click(screen.getByRole('button', { name: /select a map/i }))
     await screen.findByRole('heading', { name: /select map/i })
-    const modalRoot = screen.getByRole('heading', { name: /select map/i }).closest('.map-selector-modal')
+    const modalRoot = screen.getByRole('heading', { name: /select map/i }).closest('.msm-panel')
     const modal = within(modalRoot)
-    await userEvent.click(modal.getByRole('button', { name: 'Brawl Ball' }))
+    const tabsContainer = modalRoot.querySelector('.msm-tabs')
+    const tabs = within(tabsContainer)
+    await userEvent.click(tabs.getByRole('button', { name: /Brawl Ball/i }))
     expect(modal.getByText('Brawl Ball Map')).toBeInTheDocument()
     expect(modal.queryByText('Gem Grab Map')).not.toBeInTheDocument()
   })
@@ -567,9 +572,9 @@ describe('Map Selector', () => {
     await navigateToDraft()
     await userEvent.click(screen.getByRole('button', { name: /select a map/i }))
     await screen.findByRole('heading', { name: /select map/i })
-    const modalRoot = screen.getByRole('heading', { name: /select map/i }).closest('.map-selector-modal')
+    const modalRoot = screen.getByRole('heading', { name: /select map/i }).closest('.msm-panel')
     const modal = within(modalRoot)
-    const searchInput = modal.getByPlaceholderText(/search map/i)
+    const searchInput = modal.getByPlaceholderText(/search by map name/i)
     await userEvent.type(searchInput, 'Brawl')
     expect(modal.getByText('Brawl Ball Map')).toBeInTheDocument()
     expect(modal.queryByText('Gem Grab Map')).not.toBeInTheDocument()
