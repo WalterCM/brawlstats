@@ -77,7 +77,7 @@ class ForumCategorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ForumCategory
-        fields = ['id', 'name', 'description', 'threads_count']
+        fields = ['id', 'name', 'description', 'threads_count', 'restricted_to_seniors']
 
     def get_threads_count(self, obj):
         return obj.threads.count()
@@ -87,25 +87,51 @@ class ForumThreadSerializer(serializers.ModelSerializer):
     author_tag = serializers.CharField(source='author.player_tag', read_only=True)
     author_avatar_id = serializers.IntegerField(source='author.avatar_id', read_only=True)
     replies_count = serializers.SerializerMethodField()
+    likes_count = serializers.SerializerMethodField()
+    has_liked = serializers.SerializerMethodField()
 
     class Meta:
         model = ForumThread
         fields = [
             'id', 'category', 'title', 'content', 'author', 
             'author_name', 'author_tag', 'author_avatar_id', 
-            'created_at', 'updated_at', 'replies_count'
+            'created_at', 'updated_at', 'replies_count',
+            'is_pinned', 'likes_count', 'has_liked'
         ]
-        read_only_fields = ['id', 'author', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'author', 'created_at', 'updated_at', 'is_pinned']
 
     def get_replies_count(self, obj):
         return obj.replies.count()
+
+    def get_likes_count(self, obj):
+        return obj.likes.count()
+
+    def get_has_liked(self, obj):
+        request = self.context.get('request')
+        if request and hasattr(request, 'player') and request.player:
+            return obj.likes.filter(id=request.player.id).exists()
+        return False
 
 class ForumReplySerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source='author.name', read_only=True)
     author_tag = serializers.CharField(source='author.player_tag', read_only=True)
     author_avatar_id = serializers.IntegerField(source='author.avatar_id', read_only=True)
+    likes_count = serializers.SerializerMethodField()
+    has_liked = serializers.SerializerMethodField()
 
     class Meta:
         model = ForumReply
-        fields = ['id', 'thread', 'author', 'author_name', 'author_tag', 'author_avatar_id', 'content', 'created_at']
+        fields = [
+            'id', 'thread', 'author', 'author_name', 'author_tag', 
+            'author_avatar_id', 'content', 'created_at', 'likes_count', 'has_liked'
+        ]
         read_only_fields = ['id', 'author', 'created_at']
+
+    def get_likes_count(self, obj):
+        return obj.likes.count()
+
+    def get_has_liked(self, obj):
+        request = self.context.get('request')
+        if request and hasattr(request, 'player') and request.player:
+            return obj.likes.filter(id=request.player.id).exists()
+        return False

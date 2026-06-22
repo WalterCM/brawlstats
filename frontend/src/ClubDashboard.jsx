@@ -45,6 +45,7 @@ export default function ClubDashboard({
   const [selectedUserToLink, setSelectedUserToLink] = useState('');
   const [linkingPlayerId, setLinkingPlayerId] = useState(null);
   const [syncingRoster, setSyncingRoster] = useState(false);
+  const [syncingClubMatches, setSyncingClubMatches] = useState(false);
   const [linkingAccount, setLinkingAccount] = useState(false);
 
   // Teammate Profile States
@@ -64,7 +65,18 @@ export default function ClubDashboard({
   const [newThreadContent, setNewThreadContent] = useState('');
   const [newReplyContent, setNewReplyContent] = useState('');
 
+  // Club Stats State
+  const [clubStats, setClubStats] = useState(null);
+  const [loadingStats, setLoadingStats] = useState(false);
 
+  // Internal tab for club pages (stats/roster)
+  const [activeClubTab, setActiveClubTab] = useState('stats');
+
+  // Forum create category form
+  const [showNewCategoryForm, setShowNewCategoryForm] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryDescription, setNewCategoryDescription] = useState('');
+  const [newCategoryRestricted, setNewCategoryRestricted] = useState(false);
 
   // Initial Load
   useEffect(() => {
@@ -126,13 +138,14 @@ export default function ClubDashboard({
           setClubsList(list);
         }
       } else {
-        // User is in a club, load forum categories
+        // User is in a club, load forum categories and stats
         const catList = await api.fetchForumCategories();
         setCategories(catList);
         if (catList.length > 0) {
           setSelectedCategory(catList[0]);
           loadThreads(catList[0].id);
         }
+        loadClubStats(statusRes.club.id);
 
         // Load unlinked profiles for mapping if President/VP
         const isPres = statusRes.role === 'president';
@@ -149,6 +162,18 @@ export default function ClubDashboard({
     }
   };
 
+  const loadClubStats = async (clubId) => {
+    setLoadingStats(true);
+    try {
+      const stats = await api.fetchClubStats(clubId);
+      setClubStats(stats);
+    } catch (err) {
+      console.error('Failed to load club stats:', err);
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
   const handleSyncRoster = async () => {
     if (!clubStatus.club) return;
     setSyncingRoster(true);
@@ -162,6 +187,22 @@ export default function ClubDashboard({
       setError(err.message || 'Failed to sync roster.');
     } finally {
       setSyncingRoster(false);
+    }
+  };
+
+  const handleSyncClubMatches = async () => {
+    if (!clubStatus.club) return;
+    setSyncingClubMatches(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await api.syncClubMatches(clubStatus.club.id);
+      setSuccess(`Synced ${res.total_matches_synced} new matches across ${res.synced_players} members.`);
+      await loadClubStats(clubStatus.club.id);
+    } catch (err) {
+      setError(err.message || 'Failed to sync club matches.');
+    } finally {
+      setSyncingClubMatches(false);
     }
   };
 
@@ -351,6 +392,63 @@ export default function ClubDashboard({
     } catch (err) {
       setError(err.message || 'Failed to create thread.');
     }
+  };
+
+  // Create Category
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    setError('');
+    try {
+      await api.createForumCategory({
+        name: newCategoryName,
+        description: newCategoryDescription,
+        restricted_to_seniors: newCategoryRestricted
+      });
+      setSuccess('Category created!');
+      setNewCategoryName('');
+      setNewCategoryDescription('');
+      setNewCategoryRestricted(false);
+      setShowNewCategoryForm(false);
+      const catList = await api.fetchForumCategories();
+      setCategories(catList);
+    } catch (err) {
+      setError(err.message || 'Failed to create category.');
+    }
+  };
+
+  // Toggle thread like
+  const handleToggleThreadLike = async (threadId) => {
+    try {
+      const res = await api.likeForumThread(threadId);
+      setThreads(prev => prev.map(t =>
+        t.id === threadId ? { ...t, likes_count: res.likes_count, has_liked: res.liked } : t
+      ));
+      if (selectedThread?.id === threadId) {
+        setSelectedThread(prev => ({ ...prev, likes_count: res.likes_count, has_liked: res.liked }));
+      }
+    } catch (err) {
+      console.error('Failed to toggle thread like:', err);
+    }
+  };
+
+  // Toggle reply like
+  const handleToggleReplyLike = async (replyId) => {
+    try {
+      const res = await api.likeForumReply(replyId);
+      setReplies(prev => prev.map(r =>
+        r.id === replyId ? { ...r, likes_count: res.likes_count, has_liked: res.liked } : r
+      ));
+    } catch (err) {
+      console.error('Failed to toggle reply like:', err);
+    }
+  };
+
+  // Get role of a player in this club
+  const getMemberRole = (playerId) => {
+    if (!club?.members) return null;
+    const member = club.members.find(m => m.player === playerId);
+    return member?.role || null;
   };
 
   // Post Reply
@@ -638,19 +736,6 @@ export default function ClubDashboard({
 
   return (
     <div className="club-page-wrapper">
-      {/* Back to Hub Nav */}
-      {view !== 'settings' && (
-        <div style={{ marginBottom: '15px' }}>
-          <button 
-            className="btn btn-secondary"
-            onClick={() => navigate('/')}
-            style={{ fontSize: '13px' }}
-          >
-            ◀ Back to Hub
-          </button>
-        </div>
-      )}
-
       {/* Alert Banners */}
       {error && <div className="club-alert club-alert-error">❌ {error}</div>}
       {success && <div className="club-alert club-alert-success">✓ {success}</div>}
@@ -667,7 +752,154 @@ export default function ClubDashboard({
         {club.description && <div className="club-header-desc">"{club.description}"</div>}
       </div>
 
-      {view === 'roster' && (
+      {(view === 'stats' || view === 'roster') && (
+        <div>
+          {/* Tab Navigation */}
+          <div className="club-tab-nav">
+            <button
+              className={`tab-btn ${activeClubTab === 'stats' ? 'active' : ''}`}
+              onClick={() => setActiveClubTab('stats')}
+            >
+              📊 Stats
+            </button>
+            <button
+              className={`tab-btn ${activeClubTab === 'roster' ? 'active' : ''}`}
+              onClick={() => setActiveClubTab('roster')}
+            >
+              👥 Roster
+            </button>
+          </div>
+
+          {/* Stats Tab */}
+          {activeClubTab === 'stats' && (
+            <div className="club-stats-grid">
+              <div className="glass-panel club-panel-section">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                  <h2 style={{ margin: 0 }}>📊 Club Stats</h2>
+                  {isPresident && (
+                    <button
+                      onClick={handleSyncClubMatches}
+                      disabled={syncingClubMatches}
+                      className="btn btn-primary btn-sm"
+                      style={{ display: 'flex', alignItems: 'center', gap: '5px' }}
+                    >
+                      🔄 {syncingClubMatches ? 'Syncing...' : 'Sync All Matches'}
+                    </button>
+                  )}
+                </div>
+                {loadingStats ? (
+                  <div className="club-loading-container" style={{ minHeight: '200px' }}>
+                    <div className="spinner"></div>
+                    <p>Loading club statistics...</p>
+                  </div>
+                ) : clubStats ? (
+                  <div>
+                    {/* KPI Cards */}
+                    <div className="kpi-row">
+                      <div className="kpi-card">
+                        <div className="kpi-value">{clubStats.total_matches}</div>
+                        <div className="kpi-label">Total Matches</div>
+                      </div>
+                      <div className="kpi-card">
+                        <div className="kpi-value" style={{ color: clubStats.overall_win_rate >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
+                          {clubStats.overall_win_rate.toFixed(1)}%
+                        </div>
+                        <div className="kpi-label">Win Rate</div>
+                      </div>
+                    </div>
+
+                    {/* Leaderboard Table */}
+                    <h3 style={{ marginTop: '25px', marginBottom: '15px', fontSize: '1.1rem' }}>🏆 Member Leaderboard</h3>
+                    <div className="leaderboard-table-wrapper">
+                      <table className="leaderboard-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Player</th>
+                            <th>Role</th>
+                            <th>Games</th>
+                            <th>Win Rate</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {clubStats.leaderboard
+                            .filter(m => m.played > 0)
+                            .map((member, idx) => (
+                            <tr key={member.player_id} className={me && member.player_id === me.id ? 'highlight-row' : ''}>
+                              <td>{idx + 1}</td>
+                              <td>
+                                <div className="leaderboard-player">
+                                  {member.avatar_id ? (
+                                    <img src={`https://cdn.brawlify.com/profile-icons/regular/${member.avatar_id}.png`} alt="" className="leaderboard-avatar" />
+                                  ) : (
+                                    <div className="leaderboard-avatar-fallback">👤</div>
+                                  )}
+                                  <span>{member.name}</span>
+                                </div>
+                              </td>
+                              <td><span className={`role-badge ${member.role}`}>{member.role.replace('_', ' ')}</span></td>
+                              <td>{member.played}</td>
+                              <td className={member.win_rate >= 55 ? 'wr-high' : member.win_rate >= 50 ? 'wr-mid' : 'wr-low'}>
+                                {member.win_rate.toFixed(1)}%
+                              </td>
+                            </tr>
+                          ))}
+                          {clubStats.leaderboard.filter(m => m.played > 0).length === 0 && (
+                            <tr>
+                              <td colSpan={5} className="empty-table-msg">No matches logged yet. Sync your battle logs!</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Top Modes */}
+                    {clubStats.modes && clubStats.modes.length > 0 && (
+                      <div style={{ marginTop: '25px' }}>
+                        <h3 style={{ marginBottom: '15px', fontSize: '1.1rem' }}>🎮 Most Played Modes</h3>
+                        <div className="compact-list">
+                          {clubStats.modes.slice(0, 5).map(m => (
+                            <div key={m.mode} className="compact-list-item">
+                              <span className="compact-list-name">{m.mode}</span>
+                              <span className="compact-list-stat">{m.played} games</span>
+                              <span className={`compact-list-wr ${m.win_rate >= 55 ? 'wr-high' : m.win_rate >= 50 ? 'wr-mid' : 'wr-low'}`}>
+                                {m.win_rate.toFixed(1)}%
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Top Brawlers */}
+                    {clubStats.brawlers && clubStats.brawlers.length > 0 && (
+                      <div style={{ marginTop: '25px' }}>
+                        <h3 style={{ marginBottom: '15px', fontSize: '1.1rem' }}>⭐ Most Played Brawlers</h3>
+                        <div className="compact-list">
+                          {clubStats.brawlers.map(b => (
+                            <div key={b.id} className="compact-list-item">
+                              <span className="compact-list-name">{b.name}</span>
+                              <span className="compact-list-stat">{b.played} games</span>
+                              <span className={`compact-list-wr ${b.win_rate >= 55 ? 'wr-high' : b.win_rate >= 50 ? 'wr-mid' : 'wr-low'}`}>
+                                {b.win_rate.toFixed(1)}%
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="empty-state">
+                    <p>Could not load club statistics.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Roster Tab */}
+          {activeClubTab === 'roster' && (
         <div className="club-members-grid">
           {/* Approved Members List */}
           <div className="glass-panel club-panel-section">
@@ -899,9 +1131,11 @@ export default function ClubDashboard({
             </div>
           </div>
         </div>
+          )}
+        </div>
       )}
 
-      {view === 'forum' && me.is_admin && (
+      {view === 'forum' && (
               <div className="club-forum-grid">
                 {/* Sidebar: Categories */}
                 <div className="glass-panel forum-sidebar">
@@ -931,6 +1165,50 @@ export default function ClubDashboard({
                       </button>
                     ))}
                   </div>
+                  {isAdmin && (
+                    <div style={{ marginTop: '15px' }}>
+                      {showNewCategoryForm ? (
+                        <form onSubmit={handleCreateCategory} className="new-thread-form">
+                          <div className="form-group">
+                            <label>Category Name</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Scrims"
+                              value={newCategoryName}
+                              onChange={(e) => setNewCategoryName(e.target.value)}
+                              required
+                              maxLength="100"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label>Description</label>
+                            <input
+                              type="text"
+                              placeholder="What's this category for?"
+                              value={newCategoryDescription}
+                              onChange={(e) => setNewCategoryDescription(e.target.value)}
+                            />
+                          </div>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={newCategoryRestricted}
+                              onChange={(e) => setNewCategoryRestricted(e.target.checked)}
+                            />
+                            🔒 Seniors only
+                          </label>
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                            <button type="submit" className="btn btn-primary btn-sm">Create</button>
+                            <button type="button" onClick={() => { setShowNewCategoryForm(false); setNewCategoryName(''); setNewCategoryDescription(''); setNewCategoryRestricted(false); }} className="btn btn-secondary btn-sm">Cancel</button>
+                          </div>
+                        </form>
+                      ) : (
+                        <button onClick={() => setShowNewCategoryForm(true)} className="btn btn-secondary btn-sm" style={{ width: '100%' }}>
+                          + New Category
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Main Area: Threads or Single Thread View */}
@@ -984,26 +1262,53 @@ export default function ClubDashboard({
                               <p>No threads posted in this category yet. Be the first!</p>
                             </div>
                           ) : (
-                            threads.map(thread => (
+                            threads.map(thread => {
+                              const authorRole = getMemberRole(thread.author);
+                              return (
                               <div 
                                 key={thread.id} 
-                                className="thread-list-item"
+                                className={`thread-list-item ${thread.is_pinned ? 'thread-pinned' : ''}`}
                                 onClick={() => {
                                   setSelectedThread(thread);
                                   loadReplies(thread.id);
                                 }}
                               >
-                                <div style={{ flex: 1 }}>
-                                  <h4 className="thread-title">{thread.title}</h4>
+                                <div className="thread-list-main">
+                                  <div className="thread-title-row">
+                                    {thread.is_pinned && <span className="pinned-badge">📌</span>}
+                                    <h4 className="thread-title">{thread.title}</h4>
+                                  </div>
                                   <div className="thread-meta">
-                                    By <strong>{thread.author_name}</strong> | {new Date(thread.created_at).toLocaleDateString()}
+                                    <div className="thread-author-info">
+                                      {thread.author_avatar_id ? (
+                                        <img src={`https://cdn.brawlify.com/profile-icons/regular/${thread.author_avatar_id}.png`} alt="" className="thread-author-avatar" />
+                                      ) : (
+                                        <div className="thread-author-avatar-fallback">👤</div>
+                                      )}
+                                      <strong>{thread.author_name}</strong>
+                                      {authorRole && <span className={`role-badge ${authorRole}`}>{authorRole.replace('_', ' ')}</span>}
+                                      <span className="thread-date">{new Date(thread.created_at).toLocaleDateString()}</span>
+                                    </div>
                                   </div>
                                 </div>
-                                <div className="thread-replies-badge">
-                                  💬 {thread.replies_count}
+                                <div className="thread-list-actions">
+                                  <div className="thread-replies-badge">
+                                    💬 {thread.replies_count}
+                                  </div>
+                                  <button
+                                    className={`like-btn ${thread.has_liked ? 'liked' : ''}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleThreadLike(thread.id);
+                                    }}
+                                    title={thread.has_liked ? 'Unlike' : 'Like'}
+                                  >
+                                    {thread.has_liked ? '❤️' : '🤍'} {thread.likes_count || 0}
+                                  </button>
                                 </div>
                               </div>
-                            ))
+                              );
+                            })
                           )}
                         </div>
                       )}
@@ -1030,19 +1335,34 @@ export default function ClubDashboard({
                             <div className="post-avatar-fallback">👤</div>
                           )}
                           <div style={{ flex: 1 }}>
-                            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{selectedThread.title}</h2>
+                            <div className="thread-title-row">
+                              {selectedThread.is_pinned && <span className="pinned-badge">📌</span>}
+                              <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{selectedThread.title}</h2>
+                            </div>
                             <div className="post-meta">
-                              By <strong>{selectedThread.author_name}</strong> ({selectedThread.author_tag}) | {new Date(selectedThread.created_at).toLocaleString()}
+                              <strong>{selectedThread.author_name}</strong>
+                              {(() => { const ar = getMemberRole(selectedThread.author); return ar ? <span className={`role-badge ${ar}`}>{ar.replace('_', ' ')}</span> : null; })()}
+                              <span className="reply-tag">{selectedThread.author_tag}</span>
+                              <span className="reply-time">{new Date(selectedThread.created_at).toLocaleString()}</span>
                             </div>
                           </div>
-                          {(selectedThread.author === me.id || isAdmin) && (
-                            <button 
-                              onClick={() => handleDeleteThread(selectedThread.id)}
-                              className="btn btn-sm btn-danger"
+                          <div className="post-actions">
+                            <button
+                              className={`like-btn ${selectedThread.has_liked ? 'liked' : ''}`}
+                              onClick={(e) => { e.stopPropagation(); handleToggleThreadLike(selectedThread.id); }}
+                              title={selectedThread.has_liked ? 'Unlike' : 'Like'}
                             >
-                              Delete
+                              {selectedThread.has_liked ? '❤️' : '🤍'} {selectedThread.likes_count || 0}
                             </button>
-                          )}
+                            {(selectedThread.author === me.id || isAdmin) && (
+                              <button 
+                                onClick={() => handleDeleteThread(selectedThread.id)}
+                                className="btn btn-sm btn-danger"
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </div>
                         </div>
                         <div className="post-body">
                           {selectedThread.content}
@@ -1052,7 +1372,9 @@ export default function ClubDashboard({
                       <div className="replies-section">
                         <h3>Replies ({replies.length})</h3>
                         <div className="replies-list">
-                          {replies.map(reply => (
+                          {replies.map(reply => {
+                            const replyRole = getMemberRole(reply.author);
+                            return (
                             <div key={reply.id} className="reply-item">
                               <div className="reply-header">
                                 {reply.author_avatar_id ? (
@@ -1065,23 +1387,35 @@ export default function ClubDashboard({
                                   <div className="reply-avatar-fallback">👤</div>
                                 )}
                                 <div style={{ flex: 1 }}>
-                                  <strong>{reply.author_name}</strong> <span className="reply-tag">{reply.author_tag}</span>
+                                  <strong>{reply.author_name}</strong>
+                                  {replyRole && <span className={`role-badge ${replyRole}`}>{replyRole.replace('_', ' ')}</span>}
+                                  <span className="reply-tag">{reply.author_tag}</span>
                                   <span className="reply-time">{new Date(reply.created_at).toLocaleString()}</span>
                                 </div>
-                                {(reply.author === me.id || isAdmin) && (
-                                  <button 
-                                    onClick={() => handleDeleteReply(reply.id)}
-                                    className="btn btn-sm btn-danger-text"
+                                <div className="post-actions">
+                                  <button
+                                    className={`like-btn ${reply.has_liked ? 'liked' : ''}`}
+                                    onClick={(e) => { e.stopPropagation(); handleToggleReplyLike(reply.id); }}
+                                    title={reply.has_liked ? 'Unlike' : 'Like'}
                                   >
-                                    Delete
+                                    {reply.has_liked ? '❤️' : '🤍'} {reply.likes_count || 0}
                                   </button>
-                                )}
+                                  {(reply.author === me.id || isAdmin) && (
+                                    <button 
+                                      onClick={() => handleDeleteReply(reply.id)}
+                                      className="btn btn-sm btn-danger-text"
+                                    >
+                                      Delete
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                               <div className="reply-body">
                                 {reply.content}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
 
                         <form onSubmit={handleCreateReply} className="reply-form">

@@ -902,3 +902,247 @@
   transform: translateX(4px);
 }
 
+/* Club Stats Grid */
+.club-stats-grid {
+  display: grid;
+  gap: 30px;
+}
+
+.kpi-row {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.kpi-card {
+  flex: 1;
+  min-width: 160px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 20px 24px;
+  text-align: center;
+}
+
+.kpi-value {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.kpi-label {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+/* Leaderboard Table */
+.leaderboard-table-wrapper {
+  overflow-x: auto;
+}
+
+.leaderboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.leaderboard-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--border-glass);
+  letter-spacing: 0.5px;
+}
+
+.leaderboard-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+}
+
+.leaderboard-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.leaderboard-table .highlight-row {
+  background: rgba(0, 229, 255, 0.06);
+}
+
+.leaderboard-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.leaderboard-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+}
+
+.leaderboard-avatar-fallback {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.wr-high { color: #2ecc71; font-weight: 700; }
+.wr-mid { color: var(--color-gold); font-weight: 600; }
+.wr-low { color: var(--color-enemy); font-weight: 600; }
+
+.empty-table-msg {
+  text-align: center;
+  color: var(--color-text-muted);
+  padding: 30px 0;
+  font-style: italic;
+}
+
+/* Compact List (modes/brawlers) */
+.compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.compact-list-item {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+}
+
+.compact-list-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.compact-list-stat {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.compact-list-wr {
+  font-size: 0.9rem;
+  font-weight: 700;
+  min-width: 60px;
+  text-align: right;
+}
+
+/* Like Button */
+.like-btn {
+  background: none;
+  border: 1px solid var(--border-glass);
+  border-radius: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+  line-height: 1;
+}
+
+.like-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.like-btn.liked {
+  color: #ff4466;
+  border-color: rgba(255, 68, 102, 0.3);
+  background: rgba(255, 68, 102, 0.08);
+}
+
+.post-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Pinned Badge */
+.pinned-badge {
+  font-size: 1rem;
+  margin-right: 6px;
+}
+
+/* Thread Author Info */
+.thread-author-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.thread-author-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.thread-author-avatar-fallback {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.thread-date {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+/* Thread List Item Layout */
+.thread-list-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.thread-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.thread-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.thread-list-item .thread-list-actions .like-btn {
+  font-size: 0.8rem;
+  padding: 3px 8px;
+}
+
+/* Pinned thread highlight */
+.thread-pinned {
+  border-color: rgba(255, 183, 0, 0.3);
+  background: rgba(255, 183, 0, 0.03);
+}
+

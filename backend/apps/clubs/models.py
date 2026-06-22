@@ -46,6 +46,8 @@ class ForumThread(models.Model):
     author = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='threads')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    is_pinned = models.BooleanField(default=False)
+    likes = models.ManyToManyField(Player, related_name='liked_threads', blank=True)
 
     def __str__(self):
         return self.title
@@ -55,6 +57,7 @@ class ForumReply(models.Model):
     author = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='replies')
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
+    likes = models.ManyToManyField(Player, related_name='liked_replies', blank=True)
 
     def __str__(self):
         return f"Reply by {self.author.name} on {self.thread.title}"

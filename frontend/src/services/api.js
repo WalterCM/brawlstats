@@ -407,6 +407,19 @@ export const api = {
     return res.json();
   },
 
+  // Sync matches for all club members
+  async syncClubMatches(clubId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/sync_all_matches/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to sync club matches');
+    }
+    return res.json();
+  },
+
   // Fetch unlinked Users and Players
   async fetchUnlinkedProfiles(clubId) {
     const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/unlinked_profiles/`, {
@@ -507,5 +520,48 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to delete reply');
     return true;
+  },
+
+  // Fetch club stats
+  async fetchClubStats(clubId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/stats/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch club statistics');
+    return res.json();
+  },
+
+  // FORUM: Create a category
+  async createForumCategory(payload) {
+    const res = await fetch(`${API_BASE_URL}/forum/categories/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to create forum category');
+    }
+    return res.json();
+  },
+
+  // FORUM: Like/upvote a thread
+  async likeForumThread(threadId) {
+    const res = await fetch(`${API_BASE_URL}/forum/threads/${threadId}/like/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to toggle like on thread');
+    return res.json();
+  },
+
+  // FORUM: Like/upvote a reply
+  async likeForumReply(replyId) {
+    const res = await fetch(`${API_BASE_URL}/forum/replies/${replyId}/like/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to toggle like on reply');
+    return res.json();
   }
 };

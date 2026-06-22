@@ -476,6 +476,54 @@ class ClubViewSet(viewsets.ModelViewSet):
         return response.Response({'message': 'Roster synchronized successfully.', 'synced_count': len(active_api_tags)})
 
     @action(detail=True, methods=['post'])
+    def sync_all_matches(self, request, pk=None):
+        club = self.get_object()
+        player = request.player
+
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+
+        try:
+            req_membership = ClubMember.objects.get(club=club, player=player)
+            is_allowed = is_site_admin or req_membership.role == 'president'
+        except ClubMember.DoesNotExist:
+            is_allowed = is_site_admin
+
+        if not is_allowed:
+            return response.Response(
+                {'error': 'Only the President or Site Administrators can sync all matches.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        from apps.matches.utils import ingest_player_matches
+
+        members = ClubMember.objects.filter(
+            club=club, is_active=True, is_approved=True
+        ).select_related('player')
+
+        synced_players = 0
+        total_matches = 0
+        errors = []
+
+        for member in members:
+            p = member.player
+            if not p.player_tag:
+                continue
+            try:
+                count = ingest_player_matches(p)
+                if count > 0:
+                    synced_players += 1
+                    total_matches += count
+            except Exception as e:
+                errors.append({'player_id': p.id, 'name': p.name, 'error': str(e)})
+
+        return response.Response({
+            'synced_players': synced_players,
+            'total_matches_synced': total_matches,
+            'errors': errors
+        })
+
+    @action(detail=True, methods=['post'])
     def link_player(self, request, pk=None):
         club = self.get_object()
         user = getattr(request, 'user', None)
@@ -593,6 +641,92 @@ class ClubViewSet(viewsets.ModelViewSet):
             'unlinked_players': unlinked_players
         })
 
+    @action(detail=True, methods=['get'])
+    def stats(self, request, pk=None):
+        club = self.get_object()
+        player = request.player
+        
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+        try:
+            membership = ClubMember.objects.get(club=club, player=player)
+            if not membership.is_approved and not is_site_admin:
+                return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+        except ClubMember.DoesNotExist:
+            if not is_site_admin:
+                return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        member_players = Player.objects.filter(club_membership__club=club, club_membership__is_approved=True, club_membership__is_active=True)
+        
+        from apps.matches.models import Match
+        matches = Match.objects.filter(player__in=member_players)
+        
+        total_matches = matches.count()
+        victories = matches.filter(result='victory').count()
+        overall_win_rate = (victories / total_matches * 100) if total_matches > 0 else 0
+        
+        from django.db.models import Count, Q
+        mode_data = matches.values('mode').annotate(
+            played=Count('id'),
+            wins=Count('id', filter=Q(result='victory'))
+        ).order_by('-played')
+        
+        modes = []
+        for m in mode_data:
+            modes.append({
+                'mode': m['mode'],
+                'played': m['played'],
+                'win_rate': (m['wins'] / m['played'] * 100) if m['played'] > 0 else 0
+            })
+            
+        brawler_data = matches.values('my_brawler__id', 'my_brawler__name').annotate(
+            played=Count('id'),
+            wins=Count('id', filter=Q(result='victory'))
+        ).order_by('-played')[:5]
+        
+        brawlers_list = []
+        for b in brawler_data:
+            if b['my_brawler__id']:
+                brawlers_list.append({
+                    'id': b['my_brawler__id'],
+                    'name': b['my_brawler__name'],
+                    'played': b['played'],
+                    'win_rate': (b['wins'] / b['played'] * 100) if b['played'] > 0 else 0
+                })
+                
+        member_stats = matches.values('player__id').annotate(
+            played=Count('id'),
+            wins=Count('id', filter=Q(result='victory'))
+        )
+        stats_by_player = {s['player__id']: s for s in member_stats}
+        
+        leaderboard = []
+        for m_member in club.members.filter(is_approved=True, is_active=True):
+            p = m_member.player
+            stat = stats_by_player.get(p.id)
+            played = stat['played'] if stat else 0
+            wins = stat['wins'] if stat else 0
+            win_rate = (wins / played * 100) if played > 0 else 0
+            leaderboard.append({
+                'player_id': p.id,
+                'name': p.name,
+                'tag': p.player_tag,
+                'avatar_id': p.avatar_id,
+                'role': m_member.role,
+                'played': played,
+                'win_rate': win_rate
+            })
+            
+        leaderboard.sort(key=lambda x: (x['win_rate'], x['played']), reverse=True)
+        
+        return response.Response({
+            'total_matches': total_matches,
+            'overall_win_rate': overall_win_rate,
+            'modes': modes,
+            'brawlers': brawlers_list,
+            'leaderboard': leaderboard
+        })
+
 def check_is_senior_or_above(player, user=None):
     if user and (user.is_staff or user.is_superuser):
         return True
@@ -612,7 +746,7 @@ def check_is_senior_or_above(player, user=None):
     except AttributeError:
         return False
 
-class ForumCategoryViewSet(viewsets.ReadOnlyModelViewSet):
+class ForumCategoryViewSet(viewsets.ModelViewSet):
     serializer_class = ForumCategorySerializer
     permission_classes = [IsApprovedClubMember]
 
@@ -626,6 +760,16 @@ class ForumCategoryViewSet(viewsets.ReadOnlyModelViewSet):
             return qs
         except AttributeError:
             return ForumCategory.objects.none()
+
+    def perform_create(self, serializer):
+        player = self.request.player
+        try:
+            membership = player.club_membership
+            if membership.role not in ['president', 'vice_president']:
+                raise permissions.exceptions.PermissionDenied("Only the President or Vice President can create categories.")
+            serializer.save(club=membership.club)
+        except AttributeError:
+            raise permissions.exceptions.PermissionDenied("You are not in a club.")
 
 class ForumThreadViewSet(viewsets.ModelViewSet):
     serializer_class = ForumThreadSerializer
@@ -642,7 +786,7 @@ class ForumThreadViewSet(viewsets.ModelViewSet):
                 qs = qs.filter(category__restricted_to_seniors=False)
             if category_id:
                 qs = qs.filter(category_id=category_id)
-            return qs.order_by('-created_at')
+            return qs.order_by('-is_pinned', '-created_at')
         except AttributeError:
             return ForumThread.objects.none()
 
@@ -677,6 +821,18 @@ class ForumThreadViewSet(viewsets.ModelViewSet):
             return response.Response({'error': 'You do not have permission to delete this thread.'}, status=status.HTTP_403_FORBIDDEN)
             
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'])
+    def like(self, request, pk=None):
+        thread = self.get_object()
+        player = request.player
+        if thread.likes.filter(id=player.id).exists():
+            thread.likes.remove(player)
+            liked = False
+        else:
+            thread.likes.add(player)
+            liked = True
+        return response.Response({'liked': liked, 'likes_count': thread.likes.count()})
 
 class ForumReplyViewSet(viewsets.ModelViewSet):
     serializer_class = ForumReplySerializer
@@ -728,3 +884,15 @@ class ForumReplyViewSet(viewsets.ModelViewSet):
             return response.Response({'error': 'You do not have permission to delete this reply.'}, status=status.HTTP_403_FORBIDDEN)
             
         return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=['post'])
+    def like(self, request, pk=None):
+        reply = self.get_object()
+        player = request.player
+        if reply.likes.filter(id=player.id).exists():
+            reply.likes.remove(player)
+            liked = False
+        else:
+            reply.likes.add(player)
+            liked = True
+        return response.Response({'liked': liked, 'likes_count': reply.likes.count()})

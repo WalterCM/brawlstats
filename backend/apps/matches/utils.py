@@ -104,12 +104,6 @@ def ingest_player_matches(player):
         star_player_tag = star_player_api.get('tag', '') if star_player_api else ''
         is_star_player = star_player_tag.replace('#', '').upper() == normalized_player_tag
 
-        if draft_type == 'normal':
-            min_trophies = getattr(player, 'min_normal_trophies', 750) or 750
-            has_ranked_match = Match.objects.filter(player=player, my_brawler=my_brawler, draft_type='ranked').exists()
-            if my_brawler_trophies < min_trophies and not has_ranked_match:
-                continue
-
         with transaction.atomic():
             match = Match.objects.create(
                 player=player,

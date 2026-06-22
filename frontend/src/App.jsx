@@ -1972,7 +1972,23 @@ function App() {
             </div>
           </div>
         } />
-        <Route path="/club" element={<Navigate to="/club/roster" replace />} />
+        <Route path="/club" element={
+          <ClubDashboard 
+            me={me} 
+            setMe={setMe} 
+            brawlers={brawlers}
+            allMaps={allMaps}
+            brawlerMeta={brawlerMeta}
+            matches={matches}
+            setMatches={setMatches}
+            perceptions={perceptions}
+            handleSyncHistory={handleSyncHistory}
+            syncingHistory={syncingHistory}
+            minNormalTrophies={minNormalTrophies}
+            enterDraftMode={enterDraftMode}
+            view="stats"
+          />
+        } />
         <Route path="/club/roster" element={
           <ClubDashboard 
             me={me} 
@@ -1990,8 +2006,6 @@ function App() {
             view="roster"
           />
         } />
-        <Route path="/club/forum" element={<Navigate to="/forum" replace />} />
-        <Route path="/club/settings" element={<Navigate to="/settings" replace />} />
         <Route path="/forum" element={
           <ClubDashboard 
             me={me} 
