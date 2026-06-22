@@ -426,20 +426,9 @@ class LastBattleIngestView(views.APIView):
                                 else:
                                     candidate_draft_type = 'ranked' if candidate_map.is_ranked else 'normal'
 
-                                # Check normal filters
-                                if candidate_draft_type == 'normal':
-                                    my_brawler_id = str(my_brawler_api.get('id'))
-                                    my_brawler = Brawler.objects.filter(id=my_brawler_id).first()
-                                    if not my_brawler:
-                                        my_brawler = Brawler.objects.filter(name__iexact=my_brawler_api.get('name')).first()
-                                    if not my_brawler:
-                                        continue
+                                
 
-                                    my_brawler_trophies = my_brawler_api.get('trophies', 0) or 0
-                                    min_trophies = getattr(request.player, 'min_normal_trophies', 750)
-                                    has_ranked_match = Match.objects.filter(player=request.player, my_brawler=my_brawler, draft_type='ranked').exists()
-                                    if my_brawler_trophies < min_trophies and not has_ranked_match:
-                                        continue
+                                # Check normal filters - removed to ingest all battles
 
                                 has_any_competitive = True
 

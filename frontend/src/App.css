@@ -3089,3 +3089,37 @@
   color: var(--color-ally);
   transform: translateX(3px);
 }
+
+/* Global Floating Filter Bar */
+.global-filter-bar {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 30px;
+  width: 520px;
+  max-width: calc(100vw - 60px);
+  background: rgba(18, 22, 33, 0.95) !important;
+  backdrop-filter: blur(25px);
+  -webkit-backdrop-filter: blur(25px);
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  border-radius: 12px;
+  padding: 20px !important;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .global-filter-bar {
+    right: 15px;
+    width: calc(100% - 30px);
+    max-width: 100%;
+  }
+}
+
+/* Active Filter Button Glow */
+.btn-filter-active {
+  background: rgba(0, 229, 255, 0.15) !important;
+  border-color: var(--color-ally) !important;
+  color: var(--color-ally) !important;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.3) !important;
+}

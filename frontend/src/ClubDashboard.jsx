@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from './services/api';
+import { useFilters } from './context/FilterContext';
 import './ClubDashboard.css';
 
 
@@ -20,6 +21,12 @@ export default function ClubDashboard({
   view = 'roster'
 }) {
   const navigate = useNavigate();
+  const {
+    selectedMode,
+    selectedDraftType,
+    selectedClass,
+    timeRange
+  } = useFilters();
   const { tag } = useParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -143,7 +150,13 @@ export default function ClubDashboard({
     setLoadingStats(true);
     try {
       const s = sort || sortBy;
-      const stats = await api.fetchClubStats(clubId, s);
+      const filters = {
+        mode: selectedMode,
+        draft_type: selectedDraftType,
+        brawler_class: selectedClass,
+        time_range: timeRange
+      };
+      const stats = await api.fetchClubStats(clubId, s, filters);
       setClubStats(stats);
     } catch (err) {
       console.error('Failed to load club stats:', err);
@@ -151,6 +164,12 @@ export default function ClubDashboard({
       setLoadingStats(false);
     }
   };
+
+  useEffect(() => {
+    if (clubStatus.club && clubStatus.club.id) {
+      loadClubStats(clubStatus.club.id);
+    }
+  }, [selectedMode, selectedDraftType, selectedClass, timeRange]);
 
   const handleSyncRoster = async () => {
     if (!clubStatus.club) return;

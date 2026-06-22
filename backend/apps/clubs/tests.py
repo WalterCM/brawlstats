@@ -195,3 +195,63 @@ class ClubForumTests(APITestCase):
         # walter_user is now linked, so they shouldn't show up in unlinked_users
         unlinked_usernames = [u['username'] for u in response.data['unlinked_users']]
         self.assertNotIn('walter_web', unlinked_usernames)
+
+    def test_club_stats_filtering(self):
+        from apps.core.models import Map, Brawler
+        from apps.matches.models import Match
+        from datetime import timedelta
+        from django.utils import timezone
+
+        # Setup: Club and members
+        club = Club.objects.create(name='Brawl Champions', tag='#CHAMP123')
+        ClubMember.objects.create(club=club, player=self.player1, role='president', is_approved=True)
+
+        # Create maps and brawlers
+        shelly = Brawler.objects.create(id="1", name="Shelly", class_name="Damage Dealer")
+        map_gem = Map.objects.create(id="1", name="Stone Fort", mode="gemGrab")
+        map_ball = Map.objects.create(id="2", name="Pinhole Plaza", mode="brawlBall")
+
+        # Create matches
+        # Match 1: Gem Grab, Ranked, Victory, Today
+        Match.objects.create(
+            player=self.player1, map=map_gem, my_brawler=shelly,
+            mode='gemGrab', result='victory', draft_type='ranked', my_brawler_trophies=1000
+        )
+        # Match 2: Brawl Ball, Normal, Defeat, Today
+        Match.objects.create(
+            player=self.player1, map=map_ball, my_brawler=shelly,
+            mode='brawlBall', result='defeat', draft_type='normal', my_brawler_trophies=500
+        )
+        # Match 3: Gem Grab, Normal, Victory, 10 days ago (bypass auto_now_add via update)
+        match3 = Match.objects.create(
+            player=self.player1, map=map_gem, my_brawler=shelly,
+            mode='gemGrab', result='victory', draft_type='normal', my_brawler_trophies=800
+        )
+        Match.objects.filter(id=match3.id).update(date=timezone.now() - timedelta(days=10))
+
+        # 1. No filters: Should return total_matches=3, victories=2, win_rate = 66.67%
+        response = self.client.get(f'/api/clubs/{club.id}/stats/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # We need to find member leaderboard stats
+        leaderboard = response.data['leaderboard']
+        self.assertEqual(len(leaderboard), 1)
+        self.assertEqual(leaderboard[0]['played'], 3)
+        self.assertEqual(leaderboard[0]['wins'], 2)
+
+        # 2. Filter by mode="gemGrab": Should return total_matches=2, victories=2
+        response = self.client.get(f'/api/clubs/{club.id}/stats/', {'mode': 'gemGrab'})
+        leaderboard = response.data['leaderboard']
+        self.assertEqual(leaderboard[0]['played'], 2)
+        self.assertEqual(leaderboard[0]['wins'], 2)
+
+        # 3. Filter by draft_type="ranked": Should return total_matches=1, victories=1
+        response = self.client.get(f'/api/clubs/{club.id}/stats/', {'draft_type': 'Ranked'})
+        leaderboard = response.data['leaderboard']
+        self.assertEqual(leaderboard[0]['played'], 1)
+        self.assertEqual(leaderboard[0]['wins'], 1)
+
+        # 4. Filter by time_range="7d": Should return total_matches=2, victories=1
+        response = self.client.get(f'/api/clubs/{club.id}/stats/', {'time_range': '7d'})
+        leaderboard = response.data['leaderboard']
+        self.assertEqual(leaderboard[0]['played'], 2)
+        self.assertEqual(leaderboard[0]['wins'], 1)

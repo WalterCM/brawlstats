@@ -24,7 +24,6 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
   const [brawlerSort, setBrawlerSort] = useState('games'); // 'games', 'winrate', 'trophies'
   const [brawlerPage, setBrawlerPage] = useState(0);
   const [sessionPage, setSessionPage] = useState(0);
-  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => { setBrawlerPage(0); }, [brawlerSort, selectedMode, selectedDraftType, selectedClass, timeRange]);
 
@@ -99,7 +98,8 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
 
     // Apply Mode Filter
     if (selectedMode !== 'All') {
-      sorted = sorted.filter(m => m.mode === selectedMode);
+      const normSelected = selectedMode.toLowerCase().replace(/[^a-z0-9]/g, '');
+      sorted = sorted.filter(m => m.mode && m.mode.toLowerCase().replace(/[^a-z0-9]/g, '') === normSelected);
     }
 
     // Apply Draft Type Filter
@@ -458,13 +458,6 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
           <p className="welcome-subtitle">{playerName ? `Welcome, ${playerName}! ` : ''}Advanced Analytics &amp; Match History Insights</p>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <button 
-            className={`btn ${showFilters ? 'btn-secondary' : 'btn-primary'}`} 
-            onClick={() => setShowFilters(!showFilters)}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }}
-          >
-            {showFilters ? '🙈 Hide Filters' : '🔍 Show Filters'}
-          </button>
           {onClose && (
             <button className="btn btn-secondary" onClick={onClose}>
               ◀ Back to Home
@@ -472,57 +465,6 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
           )}
         </div>
       </div>
-
-      {/* Filter Control Center */}
-      {showFilters && (
-        <div className="filter-center glass-panel">
-        <div className="filter-group-row">
-          <div className="filter-control">
-            <label>Game Mode</label>
-            <select value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
-              {gameModesList.map(mode => (
-                <option key={mode} value={mode}>
-                  {mode === 'All' ? '🎮 All Game Modes' : `${getModeIcon(mode)} ${mode}`}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="filter-control">
-            <label>Draft Type</label>
-            <select value={selectedDraftType} onChange={(e) => setSelectedDraftType(e.target.value)}>
-              <option value="All">🏆 All Formats</option>
-              <option value="Ranked">Competitive (Ranked)</option>
-              <option value="Normal">Normal (No Bans)</option>
-            </select>
-          </div>
-
-          <div className="filter-control">
-            <label>Brawler Class</label>
-            <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}>
-              {brawlerClasses.map(cls => (
-                <option key={cls} value={cls}>
-                  {cls === 'All' ? '⚡ All Classes' : cls}
-                </option>
-              ))}
-            </select>
-          </div>
-
-        </div>
-
-        <MatchFilterBar
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          draftType={selectedDraftType}
-          levelMin={levelMin}
-          levelMax={levelMax}
-          onLevelChange={({ levelMin: lm, levelMax: lx }) => { setLevelMin(lm); setLevelMax(lx); }}
-          selectedTiers={selectedTiers}
-          onTiersChange={setSelectedTiers}
-          minNormalTrophies={minNormalTrophies}
-        />
-      </div>
-      )}
 
       {/* KPI Section */}
       <div className="kpi-grid" style={{ marginBottom: '20px' }}>

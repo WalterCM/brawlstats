@@ -130,7 +130,8 @@ export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [],
     let filtered = [...matches];
 
     if (selectedMode !== 'All') {
-      filtered = filtered.filter(m => m.mode === selectedMode);
+      const normSelected = selectedMode.toLowerCase().replace(/[^a-z0-9]/g, '');
+      filtered = filtered.filter(m => m.mode && m.mode.toLowerCase().replace(/[^a-z0-9]/g, '') === normSelected);
     }
     if (selectedDraftType !== 'All') {
       filtered = filtered.filter(m => m.draft_type === selectedDraftType.toLowerCase());
@@ -235,7 +236,8 @@ export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [],
     // Keep timeRange and mode filters for the breakdown, but ignore draftType and level bounds
     let baseMatches = [...matches].filter(m => String(m.my_brawler_id) === String(brawlerId));
     if (selectedMode !== 'All') {
-      baseMatches = baseMatches.filter(m => m.mode === selectedMode);
+      const normSelected = selectedMode.toLowerCase().replace(/[^a-z0-9]/g, '');
+      baseMatches = baseMatches.filter(m => m.mode && m.mode.toLowerCase().replace(/[^a-z0-9]/g, '') === normSelected);
     }
     baseMatches = filterByTimeRange(baseMatches, timeRange);
 

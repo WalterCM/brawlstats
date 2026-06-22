@@ -11,6 +11,8 @@ export function FilterProvider({ children }) {
   const [levelMax, setLevelMax] = useState(null);
   const [selectedTiers, setSelectedTiers] = useState([]);
 
+  const [showGlobalFilters, setShowGlobalFilters] = useState(false);
+
   const resetFilters = () => {
     setSelectedMode('All');
     setSelectedDraftType('All');
@@ -38,6 +40,8 @@ export function FilterProvider({ children }) {
         setLevelMax,
         selectedTiers,
         setSelectedTiers,
+        showGlobalFilters,
+        setShowGlobalFilters,
         resetFilters,
       }}
     >

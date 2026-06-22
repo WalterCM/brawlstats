@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
 import { api, setGlobalActiveUser } from './services/api';
 import './App.css';
@@ -12,8 +12,32 @@ import { deduplicateMaps, getMapName, getBrawlerName, getBrawlerAvatar, getModeI
 import MatchTeamsBanner from './components/MatchTeamsBanner';
 import AlertModal from './components/AlertModal';
 import MapSelectorModal from './components/MapSelectorModal';
+import { useFilters } from './context/FilterContext';
+import GlobalFilterBar from './components/GlobalFilterBar';
 
 function App() {
+  const { showGlobalFilters, setShowGlobalFilters } = useFilters();
+  const filterBarRef = useRef(null);
+  const filterBtnRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (
+        showGlobalFilters &&
+        filterBarRef.current &&
+        !filterBarRef.current.contains(event.target) &&
+        filterBtnRef.current &&
+        !filterBtnRef.current.contains(event.target)
+      ) {
+        setShowGlobalFilters(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showGlobalFilters, setShowGlobalFilters]);
+
   // Authentication & Users
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('brawl_active_user');
@@ -1193,14 +1217,22 @@ function App() {
 
         <div className="header-actions-group" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
           <button 
-            className="btn btn-primary"
+            ref={filterBtnRef}
+            className={`btn ${showGlobalFilters ? 'btn-filter-active' : ''}`}
+            onClick={() => setShowGlobalFilters(!showGlobalFilters)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }}
+          >
+            {showGlobalFilters ? '✕ Close Filters' : '🔍 Filters'}
+          </button>
+          <button 
+            className="btn"
             onClick={() => setShowHomeMapBrowser(true)}
             style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }}
           >
             🗺️ Browse Maps
           </button>
           <button 
-            className="btn btn-secondary"
+            className="btn btn-primary"
             onClick={handleSyncHistory}
             disabled={syncingHistory}
             style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', padding: '6px 12px' }}
@@ -1264,6 +1296,7 @@ function App() {
             )}
           </div>
         </div>
+        {showGlobalFilters && <GlobalFilterBar minNormalTrophies={minNormalTrophies} containerRef={filterBarRef} />}
       </header>
 
       {/* Test / Dev Triggers (Hidden in UI, used for unit tests) */}
@@ -1728,12 +1761,12 @@ function App() {
           <div className="action-buttons-row">
             <button className="btn btn-danger" onClick={resetDraft}>Reset Draft</button>
             <button
-              className="btn btn-primary"
-              onClick={openLogMatch}
+              className="btn btn-secondary"
+              onClick={() => triggerAlert("Draft Simulation Complete", "Play the match in Brawl Stars, then use 'Sync Battle Log' in the top bar to record your stats!", "success")}
               disabled={!draft.allies_picked.some(Boolean)}
               style={{ marginLeft: '10px' }}
             >
-              Log Finished Match
+              Draft Complete
             </button>
             <button
               className="btn btn-secondary"
@@ -2112,125 +2145,6 @@ function App() {
         } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-
-
-
-      {/* Post-Game Logger Modal */}
-      {showMatchLogger && (
-        <div className="modal-backdrop">
-          <div className="modal-content glass-panel">
-            <h2>Log Finished Match</h2>
-
-            <div className="modal-form-group">
-              <label>Result:</label>
-              <div className="result-toggle">
-                <button
-                  className={`btn ${matchResult === 'victory' ? 'btn-primary' : ''}`}
-                  onClick={() => setMatchResult('victory')}
-                >
-                  Victory
-                </button>
-                <button
-                  className={`btn ${matchResult === 'defeat' ? 'btn-danger' : ''}`}
-                  onClick={() => setMatchResult('defeat')}
-                >
-                  Defeat
-                </button>
-              </div>
-            </div>
-
-            <div className="modal-form-group">
-              <label>My Brawler:</label>
-              <select
-                value={myBrawler?.id || ''}
-                onChange={(e) => setMyBrawler(brawlers.find(b => b.id === e.target.value) || null)}
-              >
-                <option value="">-- Select Your Brawler --</option>
-                {draft.allies_picked.filter(Boolean).map((b, idx) => (
-                  <option key={`my-brawler-opt-${b.id}-${idx}`} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {sets.length > 0 && (
-              <div className="sets-visualization-section" style={{ marginBottom: '16px', border: '1px solid var(--border-glass)', borderRadius: '8px', padding: '12px', background: 'rgba(0,0,0,0.2)' }}>
-                <h4 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', color: '#ffb703', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>Detected Bo3 Sets ({sets.length})</span>
-                  <span style={{ fontSize: '0.75rem', color: '#aaa' }}>Linked to API</span>
-                </h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {sets.map((set, idx) => (
-                    <div key={`set-${idx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 12px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px', borderLeft: `3px solid ${set.result === 'victory' ? '#4caf50' : '#f44336'}` }}>
-                      <span style={{ fontSize: '0.9rem', fontWeight: '500' }}>Set {idx + 1}</span>
-                      <span style={{ fontWeight: 'bold', fontSize: '0.85rem', color: set.result === 'victory' ? '#4caf50' : '#f44336' }}>
-                        {set.result.toUpperCase()}
-                      </span>
-                      {draftType === 'ranked' ? (
-                        <span style={{ fontSize: '0.85rem', color: '#ccc', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {getRankIconUrl(set.my_brawler_trophies) && (
-                            <img src={getRankIconUrl(set.my_brawler_trophies)} alt="" style={{ width: 16, height: 16 }} />
-                          )}
-                          {getRankById(set.my_brawler_trophies)?.name || set.my_brawler_trophies}
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: '0.85rem', color: '#ccc' }}>{set.my_brawler_trophies} Trophies</span>
-                      )}
-                      {set.is_star_player && (
-                        <span style={{ fontSize: '0.75rem', background: '#ffb703', color: '#000', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
-                          Star Player
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="opponents-rating-section">
-              <h3>Faced Opponents: Subjective Rating</h3>
-              <p className="subtitle">Rate how hard it felt to play your brawler against them</p>
-
-              <div className="opponents-list-rating">
-                {draft.enemies_picked.filter(Boolean).map((enemy, idx) => {
-                  const opponentKey = `${enemy.id}-${idx}`;
-                  return (
-                    <div key={opponentKey} className="opponent-rating-row">
-                      <div className="opponent-info">
-                        <img src={enemy.image_url} alt={enemy.name} />
-                        <span>{enemy.name}</span>
-                      </div>
-                      <div className="rating-buttons">
-                        {[
-                          { val: 1, label: 'Easy' },
-                          { val: 0, label: 'Neutral' },
-                          { val: -1, label: 'Hard' },
-                          { val: -2, label: 'Counter' }
-                        ].map(opt => (
-                          <button
-                            key={opt.val}
-                            className={`btn btn-sm ${opponentPerceptions[opponentKey] === opt.val ? 'btn-primary' : ''}`}
-                            onClick={() => setOpponentPerceptions({
-                              ...opponentPerceptions,
-                              [opponentKey]: opt.val
-                            })}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="modal-actions">
-              <button className="btn" onClick={() => setShowMatchLogger(false)}>Cancel</button>
-              <button className="btn btn-primary" onClick={submitMatch} disabled={!myBrawler || submittingMatch}>{submittingMatch ? 'Submitting...' : 'Submit Logs'}</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <MapSelectorModal
         isOpen={showMapModal}

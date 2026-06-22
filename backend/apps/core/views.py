@@ -228,6 +228,18 @@ class MapViewSet(viewsets.ReadOnlyModelViewSet):
         
         mode = self.request.query_params.get('mode')
         if mode is not None:
-            queryset = queryset.filter(mode__iexact=mode)
+            mode_mappings = {
+                'gemgrab': ['gemGrab', 'Gem Grab'],
+                'brawlball': ['brawlBall', 'Brawl Ball'],
+                'heist': ['heist', 'Heist'],
+                'hotzone': ['hotZone', 'Hot Zone'],
+                'knockout': ['knockout', 'Knockout'],
+                'bounty': ['bounty', 'Bounty'],
+            }
+            mode_lower = mode.lower()
+            if mode_lower in mode_mappings:
+                queryset = queryset.filter(mode__in=mode_mappings[mode_lower])
+            else:
+                queryset = queryset.filter(mode__iexact=mode)
             
         return queryset

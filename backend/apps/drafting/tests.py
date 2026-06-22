@@ -458,11 +458,11 @@ class DraftAssistantTests(TestCase):
         url = reverse('match-list') + 'sync-api/'
         response = self.client.post(url)
         self.assertEqual(response.status_code, 200)
-        # Only 1 match (the Colt one) should be synced
-        self.assertEqual(response.json()['synced_count'], 1)
+        # Both matches should be synced
+        self.assertEqual(response.json()['synced_count'], 2)
 
         self.assertTrue(Match.objects.filter(player=player, my_brawler=self.colt).exists())
-        self.assertFalse(Match.objects.filter(player=player, my_brawler=self.shelly).exists())
+        self.assertTrue(Match.objects.filter(player=player, my_brawler=self.shelly).exists())
 
     def test_draft_suggestions_trophy_filtering(self):
         # Authenticate player
@@ -642,14 +642,15 @@ class DraftAssistantTests(TestCase):
         response = self.client.post(url)
         self.assertEqual(response.status_code, 200)
         
-        # Only the second match (soloRanked) should be synced
-        self.assertEqual(response.json()['synced_count'], 1)
+        # Both matches should be synced
+        self.assertEqual(response.json()['synced_count'], 2)
 
-        # Verify the only synced match in the database has draft_type = 'ranked'
-        self.assertEqual(Match.objects.filter(player=player).count(), 1)
-        match = Match.objects.get(player=player)
-        self.assertEqual(match.draft_type, 'ranked')
-        self.assertEqual(match.api_match_id, '20260613T221812.000Z')
+        # Verify the matches in the database
+        self.assertEqual(Match.objects.filter(player=player).count(), 2)
+        match_a = Match.objects.get(player=player, api_match_id='20260613T211812.000Z')
+        self.assertEqual(match_a.draft_type, 'normal')
+        match_b = Match.objects.get(player=player, api_match_id='20260613T221812.000Z')
+        self.assertEqual(match_b.draft_type, 'ranked')
 
     @patch('requests.get')
     def test_last_battle_ingest_filters(self, mock_get):
@@ -727,11 +728,20 @@ class DraftAssistantTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         
-        # Verify it picked Match B (battleTime '20260614T005000.000Z', result 'defeat')
-        self.assertEqual(response.json()['api_match_id'], '20260614T005000.000Z')
-        self.assertEqual(response.json()['result'], 'defeat')
+        # Verify it picked Match A (battleTime '20260614T010000.000Z', result 'victory')
+        self.assertEqual(response.json()['api_match_id'], '20260614T010000.000Z')
+        self.assertEqual(response.json()['result'], 'victory')
 
-        # Now, create that match in the database to simulate that it is already recorded
+        # Now, create both matches in the database to simulate that they are already recorded
+        Match.objects.create(
+            player=player,
+            map=map_obj,
+            my_brawler=self.shelly,
+            result='victory',
+            api_match_id='20260614T010000.000Z',
+            draft_type='normal',
+            my_brawler_trophies=500
+        )
         Match.objects.create(
             player=player,
             map=map_obj,

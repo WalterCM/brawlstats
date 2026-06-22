@@ -667,6 +667,38 @@ class ClubViewSet(viewsets.ModelViewSet):
         from datetime import timedelta
 
         matches = Match.objects.filter(player__in=member_players)
+
+        # Apply global filters if present in query params
+        mode = request.query_params.get('mode', 'All')
+        draft_type = request.query_params.get('draft_type', 'All')
+        brawler_class = request.query_params.get('brawler_class', 'All')
+        time_range = request.query_params.get('time_range', 'all')
+
+        if mode and mode != 'All':
+            mode_mappings = {
+                'gemgrab': ['gemGrab', 'Gem Grab'],
+                'brawlball': ['brawlBall', 'Brawl Ball'],
+                'heist': ['heist', 'Heist'],
+                'hotzone': ['hotZone', 'Hot Zone'],
+                'knockout': ['knockout', 'Knockout'],
+                'bounty': ['bounty', 'Bounty'],
+            }
+            mode_lower = mode.lower()
+            if mode_lower in mode_mappings:
+                matches = matches.filter(mode__in=mode_mappings[mode_lower])
+            else:
+                matches = matches.filter(mode__iexact=mode)
+        if draft_type and draft_type != 'All':
+            matches = matches.filter(draft_type=draft_type.lower())
+        if brawler_class and brawler_class != 'All':
+            matches = matches.filter(my_brawler__class_name__iexact=brawler_class)
+        if time_range and time_range != 'all':
+            days_map = {'1d': 1, '7d': 7, '30d': 30, '90d': 90}
+            days = days_map.get(time_range)
+            if days:
+                cutoff = timezone.now() - timedelta(days=days)
+                matches = matches.filter(date__gte=cutoff)
+
         total_matches = matches.count()
         victories = matches.filter(result='victory').count()
         overall_win_rate = (victories / total_matches * 100) if total_matches > 0 else 0

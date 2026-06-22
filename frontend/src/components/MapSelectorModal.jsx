@@ -86,7 +86,11 @@ const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) =
   if (!isOpen) return null;
 
   const filteredMaps = maps
-    .filter(m => filterMode === 'All' || m.mode === filterMode)
+    .filter(m => {
+      if (filterMode === 'All') return true;
+      const normMode = filterMode.toLowerCase().replace(/[^a-z0-9]/g, '');
+      return m.mode && m.mode.toLowerCase().replace(/[^a-z0-9]/g, '') === normMode;
+    })
     .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const pageCount = Math.max(1, Math.ceil(filteredMaps.length / PAGE_SIZE));

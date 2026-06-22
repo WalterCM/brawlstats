@@ -4,7 +4,6 @@ import { useFilters } from './context/FilterContext';
 import { api } from './services/api';
 import { getBrawlerAvatar } from './utils/helpers';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
-import MatchFilterBar from './components/MatchFilterBar';
 
 const MODE_CONFIG = {
   'Gem Grab':  { icon: '💎', color: '#00e5ff', bg: 'rgba(0,229,255,0.12)',  border: 'rgba(0,229,255,0.35)'  },
@@ -230,32 +229,7 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
             </div>
           )}
         </div>
-
         <button className="btn btn-secondary mp-back-btn" onClick={onBack}>◀ Back</button>
-      </div>
-
-      <div className="glass-panel" style={{ padding: '10px 16px', marginTop: '12px' }}>
-        <div className="filter-group-row" style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
-          <div className="filter-control" style={{ flex: '1 1 160px' }}>
-            <label>Draft Type</label>
-            <select value={selectedDraftType} onChange={(e) => setSelectedDraftType(e.target.value)}>
-              <option value="All">🏆 All Formats</option>
-              <option value="Ranked">Competitive (Ranked)</option>
-              <option value="Normal">Normal (No Bans)</option>
-            </select>
-          </div>
-        </div>
-        <MatchFilterBar
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          draftType={selectedDraftType}
-          levelMin={levelMin}
-          levelMax={levelMax}
-          onLevelChange={({ levelMin: lm, levelMax: lx }) => { setLevelMin(lm); setLevelMax(lx); }}
-          selectedTiers={selectedTiers}
-          onTiersChange={setSelectedTiers}
-          minNormalTrophies={minNormalTrophies}
-        />
       </div>
 
       {/* ── Secondary stats bar ── */}

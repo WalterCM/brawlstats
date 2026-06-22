@@ -523,8 +523,14 @@ export const api = {
   },
 
   // Fetch club stats
-  async fetchClubStats(clubId, sortBy = 'win_rate') {
-    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/stats/?sort_by=${sortBy}`, {
+  async fetchClubStats(clubId, sortBy = 'win_rate', filters = {}) {
+    let url = `${API_BASE_URL}/clubs/${clubId}/stats/?sort_by=${sortBy}`;
+    if (filters.mode && filters.mode !== 'All') url += `&mode=${encodeURIComponent(filters.mode)}`;
+    if (filters.draft_type && filters.draft_type !== 'All') url += `&draft_type=${encodeURIComponent(filters.draft_type)}`;
+    if (filters.brawler_class && filters.brawler_class !== 'All') url += `&brawler_class=${encodeURIComponent(filters.brawler_class)}`;
+    if (filters.time_range) url += `&time_range=${encodeURIComponent(filters.time_range)}`;
+
+    const res = await fetch(url, {
       headers: getAuthHeaders()
     });
     if (!res.ok) throw new Error('Failed to fetch club statistics');

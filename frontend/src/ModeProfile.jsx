@@ -103,7 +103,8 @@ export default function ModeProfile({ mode: propMode, matches = [], brawlers = [
 
     filtered = filterByTimeRange(filtered, timeRange);
     filtered = filterByLevel(filtered, selectedDraftType !== 'All' ? selectedDraftType.toLowerCase() : null, { levelMin, levelMax, selectedTiers });
-    return filtered.filter(m => m.mode === mode).sort((a, b) => new Date(b.date) - new Date(a.date));
+    const normMode = mode.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return filtered.filter(m => m.mode && m.mode.toLowerCase().replace(/[^a-z0-9]/g, '') === normMode).sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [matches, mode, selectedDraftType, timeRange, levelMin, levelMax, selectedTiers]);
 
   const modeMatches = useMemo(() => {

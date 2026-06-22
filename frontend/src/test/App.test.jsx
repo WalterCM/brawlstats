@@ -280,11 +280,11 @@ describe('Draft UI', () => {
     expect(screen.getByText(/powered by bayesian smoothing/i)).toBeInTheDocument()
   })
 
-  it('has reset draft and disabled log match buttons', async () => {
+  it('has reset draft and disabled draft complete buttons', async () => {
     render(<App />)
     await navigateToDraft()
     expect(screen.getByText('Reset Draft')).toBeInTheDocument()
-    expect(screen.getByText('Log Finished Match')).toBeDisabled()
+    expect(screen.getByText('Draft Complete')).toBeDisabled()
   })
 
   it('exits back to main menu', async () => {
@@ -346,8 +346,7 @@ describe('Stats Dashboard & Battle Log', () => {
     await waitForWelcome()
     await userEvent.click(screen.getByText('Stats Dashboard'))
     expect(await screen.findByText(/personal stats dashboard/i)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: /Show Filters/i }))
-    await userEvent.click(screen.getAllByText(/Gem Grab/i)[1])
+    await userEvent.click(screen.getAllByText(/Gem Grab/i)[0])
     expect(await screen.findByText(/Brawler Performance in Gem Grab/i)).toBeInTheDocument()
   })
 })
@@ -395,13 +394,13 @@ describe('Draft: Place Brawler', () => {
     localStorage.setItem('brawl_active_user', JSON.stringify({ id: 'test', token: 'test-token-123', name: 'TestPlayer' }))
   })
 
-  it('places a brawler in the allies pick slot and enables log match', async () => {
+  it('places a brawler in the allies pick slot and enables draft complete button', async () => {
     render(<App />)
     await navigateToDraft()
-    expect(screen.getByText('Log Finished Match')).toBeDisabled()
+    expect(screen.getByText('Draft Complete')).toBeDisabled()
     await userEvent.click(screen.getAllByText('PICK 1')[0])
     await userEvent.click(screen.getByText('Stu'))
-    expect(screen.getByText('Log Finished Match')).toBeEnabled()
+    expect(screen.getByText('Draft Complete')).toBeEnabled()
   })
 
   it('clears a placed brawler from a pick slot', async () => {
@@ -411,7 +410,7 @@ describe('Draft: Place Brawler', () => {
     await userEvent.click(screen.getByText('Stu'))
     const clearBtn = screen.getByText('×')
     await userEvent.click(clearBtn)
-    expect(screen.getByText('Log Finished Match')).toBeDisabled()
+    expect(screen.getByText('Draft Complete')).toBeDisabled()
   })
 })
 
@@ -459,91 +458,25 @@ describe('Suggestions Breakdown', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Match Logger Modal
+// Informative Draft Completion
 // ---------------------------------------------------------------------------
-describe('Match Logger Modal', () => {
+describe('Informative Draft Completion', () => {
   beforeEach(() => {
     localStorage.setItem('brawl_active_user', JSON.stringify({ id: 'test', token: 'test-token-123', name: 'TestPlayer' }))
   })
 
-  it('opens match logger with form fields after placing a brawler', async () => {
+  it('shows Draft Complete button instead of Log Finished Match', async () => {
     render(<App />)
     await navigateToDraft()
     await userEvent.click(screen.getAllByText('PICK 1')[0])
     await userEvent.click(screen.getByText('Stu'))
-    await userEvent.click(screen.getByText('Log Finished Match'))
-    expect(screen.getByRole('heading', { name: /log finished match/i })).toBeInTheDocument()
-    expect(screen.getByText('Victory')).toBeInTheDocument()
-    expect(screen.getByText('Defeat')).toBeInTheDocument()
-    expect(screen.getByText('Cancel')).toBeInTheDocument()
-    expect(screen.getByText('Submit Logs')).toBeInTheDocument()
-  })
-
-  it('selects my brawler from dropdown', async () => {
-    render(<App />)
-    await navigateToDraft()
-    await userEvent.click(screen.getAllByText('PICK 1')[0])
-    await userEvent.click(screen.getByText('Stu'))
-    await userEvent.click(screen.getByText('Log Finished Match'))
-    const select = screen.getByDisplayValue('-- Select Your Brawler --')
-    await userEvent.selectOptions(select, 'Stu')
-    expect(screen.getByText('Submit Logs')).toBeEnabled()
-  })
-
-  it('submits new match via match logger', async () => {
-    render(<App />)
-    await waitForWelcome()
-    await userEvent.click(screen.getByText('Competitive Draft (Ranked)'))
-    await screen.findByRole('button', { name: /select a map/i })
-    await selectMapFromModal('Gem Grab Map')
-    await userEvent.click(screen.getAllByText('PICK 1')[0])
-    await userEvent.click(screen.getByText('Stu'))
-    await userEvent.click(screen.getByText('Log Finished Match'))
-    await userEvent.selectOptions(screen.getByDisplayValue('-- Select Your Brawler --'), 'Stu')
-    await userEvent.click(screen.getByText('Submit Logs'))
-    await waitFor(() => { expect(mockApi.submitMatchSeries).toHaveBeenCalled() })
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Perceptions in Match Logger
-// ---------------------------------------------------------------------------
-describe('Perception Rating Buttons', () => {
-  beforeEach(() => {
-    localStorage.setItem('brawl_active_user', JSON.stringify({ id: 'test', token: 'test-token-123', name: 'TestPlayer' }))
-  })
-
-  it('shows perception buttons for each enemy in match logger', async () => {
-    render(<App />)
-    await navigateToDraft()
-    await userEvent.click(screen.getAllByText('PICK 1')[0])
-    await userEvent.click(screen.getByText('Stu'))
-    await userEvent.click(screen.getAllByText('Bull')[0])
-    await userEvent.click(screen.getByText('Log Finished Match'))
-    const modalRoot = screen.getByRole('heading', { name: /log finished match/i }).closest('.modal-content')
-    const modal = within(modalRoot)
-    expect(modal.getByText(/subjective rating/i)).toBeInTheDocument()
-    expect(modal.getByText('Easy')).toBeInTheDocument()
-    expect(modal.getByText('Neutral')).toBeInTheDocument()
-    expect(modal.getByText('Hard')).toBeInTheDocument()
-    expect(modal.getByText('Counter')).toBeInTheDocument()
-  })
-
-  it('changes perception rating on button click', async () => {
-    render(<App />)
-    await navigateToDraft()
-    await userEvent.click(screen.getAllByText('PICK 1')[0])
-    await userEvent.click(screen.getByText('Stu'))
-    await userEvent.click(screen.getAllByText('Bull')[0])
-    await userEvent.click(screen.getByText('Log Finished Match'))
-    const modalRoot = screen.getByRole('heading', { name: /log finished match/i }).closest('.modal-content')
-    const modal = within(modalRoot)
-    const neutralBtn = modal.getByText('Neutral')
-    expect(neutralBtn.className).toContain('btn-primary')
-    const easyBtn = modal.getByText('Easy')
-    await userEvent.click(easyBtn)
-    expect(easyBtn.className).toContain('btn-primary')
-    expect(neutralBtn.className).not.toContain('btn-primary')
+    
+    expect(screen.queryByText('Log Finished Match')).not.toBeInTheDocument()
+    const draftCompleteBtn = screen.getByText('Draft Complete')
+    expect(draftCompleteBtn).toBeInTheDocument()
+    
+    await userEvent.click(draftCompleteBtn)
+    expect(screen.getByText(/Draft Simulation Complete/i)).toBeInTheDocument()
   })
 })
 
