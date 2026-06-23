@@ -4,7 +4,7 @@ import { getRankById, getRankIconUrl } from './utils/helpers';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
 import MatchFilterBar from './components/MatchFilterBar';
 
-export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onClose, onBrawlerClick, onMapClick, onModeClick, onBrowseMaps, playerName }) {
+export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onClose, onBrawlerClick, onMapClick, onModeClick, onBrowseMaps, playerName, isOwnProfile = true }) {
   const {
     selectedMode,
     setSelectedMode,
@@ -599,7 +599,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       */}
 
       {/* Result Strip */}
-      {resultStrip.length > 0 && (
+      {isOwnProfile && resultStrip.length > 0 && (
         <div className="glass-panel" style={{ padding: '16px 20px', marginBottom: '20px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <h3 style={{ margin: 0, fontSize: '14px' }}>🟢🔴 Match History Strip</h3>
@@ -633,7 +633,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
       )}
 
       {/* Rolling Win Rate */}
-      {rollingWinRate.length >= 2 && (
+      {isOwnProfile && rollingWinRate.length >= 2 && (
         <div className="glass-panel" style={{ padding: '16px 20px', marginBottom: '20px' }}>
           <h3 style={{ margin: '0 0 4px' }}>📈 Rolling Win Rate (Window of 5)</h3>
           <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '0 0 12px' }}>
@@ -828,7 +828,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
         </div>
 
           {/* Session Analysis */}
-          {(() => {
+          {isOwnProfile && (() => {
             const sorted = [...filteredMatches].sort((a, b) => new Date(a.date) - new Date(b.date));
             const sessions = [];
             let current = [];
@@ -929,7 +929,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
           })()}
 
           {/* Smart Alerts inside left column */}
-          {smartAlerts.length > 0 && (
+          {isOwnProfile && smartAlerts.length > 0 && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '20px' }}>
               {smartAlerts.map((alert, idx) => (
                 <div 

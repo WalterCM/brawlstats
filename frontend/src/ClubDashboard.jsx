@@ -784,7 +784,11 @@ export default function ClubDashboard({
                             <tr key={member.player_id} className={me && member.player_id === me.id ? 'highlight-row' : ''}>
                               <td>{idx + 1}</td>
                               <td>
-                                <div className="leaderboard-player" style={{ whiteSpace: 'nowrap' }}>
+                                <div 
+                                  className="leaderboard-player" 
+                                  style={{ whiteSpace: 'nowrap', cursor: 'pointer' }}
+                                  onClick={() => navigate(`/stats/member/${String(member.tag || member.player_id).replace('#', '')}`)}
+                                >
                                   {member.avatar_id ? (
                                     <img src={`https://cdn.brawlify.com/profile-icons/regular/${member.avatar_id}.png`} alt="" className="leaderboard-avatar" />
                                   ) : (
@@ -793,7 +797,7 @@ export default function ClubDashboard({
                                   <span>{member.name}</span>
                                 </div>
                               </td>
-                              <td><span className={`role-badge ${member.role}`}>{member.role.replace('_', ' ')}</span></td>
+                              <td>{member.role ? <span className={`role-badge ${member.role}`}>{member.role.replace('_', ' ')}</span> : '-'}</td>
                               <td>{member.wins}</td>
                               <td>{member.defeats}</td>
                               <td className={member.win_rate >= 55 ? 'wr-high' : member.win_rate >= 50 ? 'wr-mid' : 'wr-low'}>
@@ -894,14 +898,21 @@ export default function ClubDashboard({
                       <img 
                         src={`https://cdn.brawlify.com/profile-icons/regular/${member.avatar_id}.png`} 
                         alt="" 
-                        className="roster-avatar"
+                        className="roster-avatar roster-clickable-avatar"
+                        onClick={() => navigate(`/stats/member/${String(member.player_tag || member.player).replace('#', '')}`)}
                       />
                     ) : (
-                      <div className="roster-avatar-fallback">👤</div>
+                      <div 
+                        className="roster-avatar-fallback roster-clickable-avatar"
+                        onClick={() => navigate(`/stats/member/${String(member.player_tag || member.player).replace('#', '')}`)}
+                      >👤</div>
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="roster-name" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                        <span>{member.player_name}</span>
+                        <span 
+                          className="roster-clickable-name"
+                          onClick={() => navigate(`/stats/member/${String(member.player_tag || member.player).replace('#', '')}`)}
+                        >{member.player_name}</span>
                         {member.is_linked ? (
                           <span className="linked-badge" style={{ background: 'rgba(46, 204, 113, 0.15)', color: '#2ecc71', fontSize: '0.75rem', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(46, 204, 113, 0.4)', fontWeight: 'bold' }}>
                             🔗 {member.linked_email}
@@ -1239,7 +1250,14 @@ export default function ClubDashboard({
                                     <h4 className="thread-title">{thread.title}</h4>
                                   </div>
                                   <div className="thread-meta">
-                                    <div className="thread-author-info">
+                                    <div 
+                                      className="thread-author-info"
+                                      style={{ cursor: 'pointer' }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        navigate(`/stats/member/${String(thread.author_tag || thread.author).replace('#', '')}`);
+                                      }}
+                                    >
                                       {thread.author_avatar_id ? (
                                         <img src={`https://cdn.brawlify.com/profile-icons/regular/${thread.author_avatar_id}.png`} alt="" className="thread-author-avatar" />
                                       ) : (
@@ -1285,25 +1303,31 @@ export default function ClubDashboard({
 
                       <div className="thread-main-post">
                         <div className="post-header">
-                          {selectedThread.author_avatar_id ? (
-                            <img 
-                              src={`https://cdn.brawlify.com/profile-icons/regular/${selectedThread.author_avatar_id}.png`} 
-                              alt="" 
-                              className="post-avatar"
-                            />
-                          ) : (
-                            <div className="post-avatar-fallback">👤</div>
-                          )}
-                          <div style={{ flex: 1 }}>
-                            <div className="thread-title-row">
-                              {selectedThread.is_pinned && <span className="pinned-badge">📌</span>}
-                              <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{selectedThread.title}</h2>
-                            </div>
-                            <div className="post-meta">
-                              <strong>{selectedThread.author_name}</strong>
-                              {(() => { const ar = getMemberRole(selectedThread.author); return ar ? <span className={`role-badge ${ar}`}>{ar.replace('_', ' ')}</span> : null; })()}
-                              <span className="reply-tag">{selectedThread.author_tag}</span>
-                              <span className="reply-time">{new Date(selectedThread.created_at).toLocaleString()}</span>
+                          <div 
+                            className="post-header-clickable"
+                            style={{ display: 'flex', gap: '15px', alignItems: 'center', flex: 1, cursor: 'pointer' }}
+                            onClick={() => navigate(`/stats/member/${String(selectedThread.author_tag || selectedThread.author).replace('#', '')}`)}
+                          >
+                            {selectedThread.author_avatar_id ? (
+                              <img 
+                                src={`https://cdn.brawlify.com/profile-icons/regular/${selectedThread.author_avatar_id}.png`} 
+                                alt="" 
+                                className="post-avatar"
+                              />
+                            ) : (
+                              <div className="post-avatar-fallback">👤</div>
+                            )}
+                            <div style={{ flex: 1 }}>
+                              <div className="thread-title-row">
+                                {selectedThread.is_pinned && <span className="pinned-badge">📌</span>}
+                                <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{selectedThread.title}</h2>
+                              </div>
+                              <div className="post-meta">
+                                <strong>{selectedThread.author_name}</strong>
+                                {(() => { const ar = getMemberRole(selectedThread.author); return ar ? <span className={`role-badge ${ar}`}>{ar.replace('_', ' ')}</span> : null; })()}
+                                <span className="reply-tag">{selectedThread.author_tag}</span>
+                                <span className="reply-time">{new Date(selectedThread.created_at).toLocaleString()}</span>
+                              </div>
                             </div>
                           </div>
                           <div className="post-actions">
@@ -1337,20 +1361,26 @@ export default function ClubDashboard({
                             return (
                             <div key={reply.id} className="reply-item">
                               <div className="reply-header">
-                                {reply.author_avatar_id ? (
-                                  <img 
-                                    src={`https://cdn.brawlify.com/profile-icons/regular/${reply.author_avatar_id}.png`} 
-                                    alt="" 
-                                    className="reply-avatar"
-                                  />
-                                ) : (
-                                  <div className="reply-avatar-fallback">👤</div>
-                                )}
-                                <div style={{ flex: 1 }}>
-                                  <strong>{reply.author_name}</strong>
-                                  {replyRole && <span className={`role-badge ${replyRole}`}>{replyRole.replace('_', ' ')}</span>}
-                                  <span className="reply-tag">{reply.author_tag}</span>
-                                  <span className="reply-time">{new Date(reply.created_at).toLocaleString()}</span>
+                                <div 
+                                  className="reply-header-clickable"
+                                  style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1, cursor: 'pointer' }}
+                                  onClick={() => navigate(`/stats/member/${String(reply.author_tag || reply.author).replace('#', '')}`)}
+                                >
+                                  {reply.author_avatar_id ? (
+                                    <img 
+                                      src={`https://cdn.brawlify.com/profile-icons/regular/${reply.author_avatar_id}.png`} 
+                                      alt="" 
+                                      className="reply-avatar"
+                                    />
+                                  ) : (
+                                    <div className="reply-avatar-fallback">👤</div>
+                                  )}
+                                  <div style={{ flex: 1 }}>
+                                    <strong>{reply.author_name}</strong>
+                                    {replyRole && <span className={`role-badge ${replyRole}`}>{replyRole.replace('_', ' ')}</span>}
+                                    <span className="reply-tag">{reply.author_tag}</span>
+                                    <span className="reply-time">{new Date(reply.created_at).toLocaleString()}</span>
+                                  </div>
                                 </div>
                                 <div className="post-actions">
                                   <button

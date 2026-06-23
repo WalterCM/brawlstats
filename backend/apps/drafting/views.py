@@ -14,8 +14,27 @@ class PerceptionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSupabaseAuthenticated]
 
     def get_queryset(self):
-        # Filter subjective ratings to the authenticated player
-        return Perception.objects.filter(player=self.request.player).order_by('-date')
+        request_player = self.request.player
+        target_player_id = self.request.query_params.get('player_id')
+        
+        if target_player_id and str(target_player_id) != str(request_player.id):
+            user = self.request.user
+            is_site_admin = user and (user.is_staff or user.is_superuser)
+            if is_site_admin:
+                return Perception.objects.filter(player_id=target_player_id).order_by('-date')
+            try:
+                from apps.clubs.models import ClubMember
+                my_membership = request_player.club_membership
+                target_membership = ClubMember.objects.get(player_id=target_player_id)
+                if (my_membership.club_id == target_membership.club_id and 
+                    my_membership.is_approved and my_membership.is_active and
+                    target_membership.is_approved and target_membership.is_active):
+                    return Perception.objects.filter(player_id=target_player_id).order_by('-date')
+            except (AttributeError, ClubMember.DoesNotExist):
+                pass
+            return Perception.objects.none()
+
+        return Perception.objects.filter(player=request_player).order_by('-date')
 
 
 class DraftSuggestionView(views.APIView):

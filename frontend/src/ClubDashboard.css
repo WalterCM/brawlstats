@@ -1146,3 +1146,31 @@
   background: rgba(255, 183, 0, 0.03);
 }
 
+/* Clickable Club Members and Leaderboard row hovers */
+.roster-clickable-name {
+  cursor: pointer;
+}
+.roster-clickable-name:hover,
+.leaderboard-player:hover span {
+  color: var(--color-ally) !important;
+  text-shadow: 0 0 10px var(--color-ally-glow);
+  text-decoration: underline;
+}
+
+.roster-clickable-avatar {
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.roster-clickable-avatar:hover {
+  border-color: var(--color-ally) !important;
+  box-shadow: 0 0 10px var(--color-ally-glow);
+}
+
+.thread-author-info:hover strong,
+.post-header-clickable:hover strong,
+.reply-header-clickable:hover strong {
+  color: var(--color-ally) !important;
+  text-shadow: 0 0 10px var(--color-ally-glow);
+  text-decoration: underline;
+}
+

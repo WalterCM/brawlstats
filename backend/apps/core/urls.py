@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from apps.core.views import BrawlerViewSet, MapViewSet, PlayerMeView, UserLoginView, UserRegisterView, PasswordlessAccessView, PlayerListView
+from apps.core.views import BrawlerViewSet, MapViewSet, PlayerMeView, UserLoginView, UserRegisterView, PasswordlessAccessView, PlayerListView, PlayerDetailView
 
 router = DefaultRouter()
 router.register(r'brawlers', BrawlerViewSet, basename='brawler')
@@ -12,5 +12,6 @@ urlpatterns = [
     path('players/me/', PlayerMeView.as_view(), name='player-me'),
     path('players/list/', PlayerListView.as_view(), name='player-list'),
     path('players/access/', PasswordlessAccessView.as_view(), name='player-access'),
+    path('players/<str:pk>/', PlayerDetailView.as_view(), name='player-detail'),
     path('', include(router.urls)),
 ]

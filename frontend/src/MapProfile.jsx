@@ -167,6 +167,36 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
       .slice(0, 3);
   }, [brawlerStats, suggestions]);
 
+  // Draft pick/ban frequency from ranked matches on this map
+  const draftFrequency = useMemo(() => {
+    const freq = {};
+    mapMatches
+      .filter(m => m.draft_type === 'ranked')
+      .forEach(m => {
+        (m.draft_events || []).forEach(evt => {
+          const key = `${evt.brawler_id}__${evt.type}__${evt.team}`;
+          if (!freq[key]) freq[key] = { brawler_id: evt.brawler_id, type: evt.type, team: evt.team, count: 0 };
+          freq[key].count++;
+        });
+      });
+    return Object.values(freq).sort((a, b) => b.count - a.count);
+  }, [mapMatches]);
+
+  const topPicks = useMemo(() => {
+    const picks = draftFrequency.filter(d => d.type === 'pick');
+    const alliedPicks = picks.filter(d => d.team === 'allied').slice(0, 6);
+    const enemyPicks = picks.filter(d => d.team === 'enemy').slice(0, 6);
+    const bans = draftFrequency.filter(d => d.type === 'ban').slice(0, 6);
+    return { allied: alliedPicks, enemy: enemyPicks, bans };
+  }, [draftFrequency]);
+
+  const maxPickCount = useMemo(() => Math.max(
+    ...topPicks.allied.map(d => d.count),
+    ...topPicks.enemy.map(d => d.count),
+    ...topPicks.bans.map(d => d.count),
+    1
+  ), [topPicks]);
+
   if (!mapData) return null;
 
   const modeCfg = getModeConfig(mapData.mode);
@@ -490,6 +520,71 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
 
           {/* ── Right sidebar ── */}
           <div className="dashboard-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+            {/* Draft Pick/Ban Frequency — Ranked Meta Insights */}
+            {(topPicks.allied.length > 0 || topPicks.enemy.length > 0 || topPicks.bans.length > 0) && (
+              <div className="dashboard-section glass-panel">
+                <h3>🎯 Ranked Meta Insights</h3>
+                <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 14px' }}>Most frequent picks & bans on this map</p>
+
+                {topPicks.allied.length > 0 && (
+                  <div style={{ marginBottom: '14px' }}>
+                    <h4 style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-ally)', marginBottom: '8px' }}>Allied Picks</h4>
+                    {topPicks.allied.map(d => {
+                      const b = brawlers.find(br => String(br.id) === String(d.brawler_id));
+                      return (
+                        <div key={`ap-${d.brawler_id}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+                          {b?.image_url && <img src={b.image_url} alt={b?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', border: '1.5px solid var(--color-ally)' }} />}
+                          <span style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b?.name || '?'}</span>
+                          <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                            <div style={{ width: `${(d.count / maxPickCount) * 100}%`, height: '100%', borderRadius: '3px', background: 'var(--color-ally)' }} />
+                          </div>
+                          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{d.count}x</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {topPicks.enemy.length > 0 && (
+                  <div style={{ marginBottom: '14px' }}>
+                    <h4 style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--color-enemy)', marginBottom: '8px' }}>Enemy Picks</h4>
+                    {topPicks.enemy.map(d => {
+                      const b = brawlers.find(br => String(br.id) === String(d.brawler_id));
+                      return (
+                        <div key={`ep-${d.brawler_id}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+                          {b?.image_url && <img src={b.image_url} alt={b?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', border: '1.5px solid var(--color-enemy)' }} />}
+                          <span style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b?.name || '?'}</span>
+                          <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                            <div style={{ width: `${(d.count / maxPickCount) * 100}%`, height: '100%', borderRadius: '3px', background: 'var(--color-enemy)' }} />
+                          </div>
+                          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{d.count}x</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {topPicks.bans.length > 0 && (
+                  <div>
+                    <h4 style={{ fontSize: '10px', textTransform: 'uppercase', color: '#ffb703', marginBottom: '8px' }}>Most Banned</h4>
+                    {topPicks.bans.map(d => {
+                      const b = brawlers.find(br => String(br.id) === String(d.brawler_id));
+                      return (
+                        <div key={`bn-${d.brawler_id}-${d.team}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+                          {b?.image_url && <img src={b.image_url} alt={b?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', border: '1.5px solid #ffb703', filter: 'grayscale(0.4)' }} />}
+                          <span style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b?.name || '?'}</span>
+                          <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
+                            <div style={{ width: `${(d.count / maxPickCount) * 100}%`, height: '100%', borderRadius: '3px', background: '#ffb703' }} />
+                          </div>
+                          <span style={{ fontSize: '10px', color: 'var(--color-text-muted)' }}>{d.count}x</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Recent Matches */}
             <div className="dashboard-section glass-panel">

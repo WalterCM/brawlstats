@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { api, setGlobalActiveUser } from './services/api';
 import './App.css';
 import StatsDashboard from './StatsDashboard';
@@ -196,11 +196,9 @@ function App() {
     }
   };
 
-  // Load catalogs and stats whenever active user changes
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('brawl_active_user', JSON.stringify(currentUser));
-      navigate('/');
       loadCatalogs();
     } else {
       localStorage.removeItem('brawl_active_user');
@@ -327,6 +325,7 @@ function App() {
       const userSession = { id: data.token, token: data.token, name: data.username };
       setGlobalActiveUser(data.token, data.username);
       setCurrentUser(userSession);
+      navigate('/');
     } catch (err) {
       setAuthError(err.message || 'Failed to login with selected profile.');
     }
@@ -342,6 +341,7 @@ function App() {
       setGlobalActiveUser(data.token, data.username);
       setCurrentUser(userSession);
       setNewPlayerTag('');
+      navigate('/');
     } catch (err) {
       setAuthError(err.message || 'Failed to register with tag. Make sure it is valid.');
     }
@@ -358,6 +358,7 @@ function App() {
       setCurrentUser(userSession);
       setLoginUsername('');
       setLoginPassword('');
+      navigate('/');
     } catch (err) {
       setAuthError(err.message || 'Login failed. Check credentials.');
     }
@@ -374,6 +375,7 @@ function App() {
       setCurrentUser(userSession);
       setRegisterUsername('');
       setRegisterPassword('');
+      navigate('/');
     } catch (err) {
       setAuthError(err.message || 'Registration failed. Username may be taken.');
     }
@@ -1207,12 +1209,6 @@ function App() {
           >
             📜 Battle Log
           </button>
-          <button 
-            className={`nav-link ${location.pathname === '/settings' ? 'active' : ''}`}
-            onClick={() => navigate('/settings')}
-          >
-            ⚙️ Settings
-          </button>
         </nav>
 
         <div className="header-actions-group" style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
@@ -1265,20 +1261,20 @@ function App() {
                 <button 
                   className="dropdown-item"
                   onClick={() => {
-                    navigate('/settings');
+                    navigate('/');
                     setShowProfileDropdown(false);
                   }}
                 >
-                  ⚙️ View Profile
+                  👤 View Profile
                 </button>
                 <button 
                   className="dropdown-item"
                   onClick={() => {
-                    navigate('/club');
+                    navigate('/settings');
                     setShowProfileDropdown(false);
                   }}
                 >
-                  🛡️ Club & Forums
+                  ⚙️ Settings
                 </button>
                 <div className="dropdown-divider"></div>
                 <div className="dropdown-title">Session</div>
@@ -2143,6 +2139,17 @@ function App() {
             />
           </div>
         } />
+        <Route path="/stats/member/:memberId" element={
+          <MemberStatsView
+            brawlers={brawlers}
+            allMaps={allMaps}
+            brawlerMeta={brawlerMeta}
+            minNormalTrophies={minNormalTrophies}
+            setSelectedProfileBrawlerId={setSelectedProfileBrawlerId}
+            setSelectedMapId={setSelectedMapId}
+            setSelectedMode={setSelectedMode}
+          />
+        } />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
@@ -2177,6 +2184,113 @@ function App() {
         title={modalAlert.title}
         message={modalAlert.message}
         onClose={handleCloseAlert}
+      />
+    </div>
+  );
+}
+
+function MemberStatsView({ brawlers, allMaps, brawlerMeta, minNormalTrophies, setSelectedProfileBrawlerId, setSelectedMapId, setSelectedMode }) {
+  const { memberId } = useParams();
+  const navigate = useNavigate();
+  const [memberProfile, setMemberProfile] = useState(null);
+  const [memberMatches, setMemberMatches] = useState([]);
+  const [memberPerceptions, setMemberPerceptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchMemberData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const profile = await api.fetchPlayerDetails(memberId);
+        const [matchHistory, perceptionList] = await Promise.all([
+          api.fetchMatches(profile.id),
+          api.fetchPerceptions(profile.id)
+        ]);
+        if (active) {
+          setMemberProfile(profile);
+          setMemberMatches(matchHistory);
+          setMemberPerceptions(perceptionList);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (active) {
+          console.error("Error loading member data:", err);
+          setError(err.message || "Failed to load member statistics.");
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchMemberData();
+    return () => {
+      active = false;
+    };
+  }, [memberId]);
+
+  if (loading) {
+    return (
+      <div className="empty-state" style={{ padding: '60px 20px', textAlign: 'center' }}>
+        <div className="spinner" style={{ margin: '0 auto 20px auto', width: '40px', height: '40px', border: '4px solid rgba(255,255,255,0.1)', borderTopColor: '#00f6ff', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+        <p>Loading member statistics...</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="empty-state" style={{ padding: '60px 20px', textAlign: 'center' }}>
+        <p style={{ color: '#ff4d4d', marginBottom: '15px' }}>❌ {error}</p>
+        <button className="btn btn-secondary" onClick={() => navigate('/club')}>Back to Club</button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(255,255,255,0.02)', padding: '15px 20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)} style={{ marginRight: '10px' }}>
+          ⬅️ Back
+        </button>
+        {memberProfile?.avatar_id ? (
+          <img 
+            src={`https://cdn.brawlify.com/profile-icons/regular/${memberProfile.avatar_id}.png`} 
+            alt="" 
+            style={{ width: '48px', height: '48px', borderRadius: '50%', border: '2px solid var(--accent-primary)' }}
+          />
+        ) : (
+          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>👤</div>
+        )}
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{memberProfile?.name}</h2>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Club Member | Tag: {memberProfile?.player_tag}</span>
+        </div>
+      </div>
+      <StatsDashboard
+        playerName={memberProfile?.name}
+        matches={memberMatches}
+        perceptions={memberPerceptions}
+        brawlers={brawlers}
+        allMaps={allMaps}
+        brawlerMeta={brawlerMeta}
+        minNormalTrophies={minNormalTrophies}
+        onClose={null}
+        onBrowseMaps={null}
+        isOwnProfile={false}
+        onBrawlerClick={(brawlerId) => {
+          setSelectedProfileBrawlerId(brawlerId);
+          navigate(`/stats/brawler/${brawlerId}`);
+        }}
+        onMapClick={(mapId) => {
+          setSelectedMapId(mapId);
+          navigate(`/stats/map/${mapId}`);
+        }}
+        onModeClick={(mode) => {
+          setSelectedMode(mode);
+          navigate(`/stats/mode/${mode}`);
+        }}
       />
     </div>
   );

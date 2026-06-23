@@ -237,11 +237,25 @@ export const api = {
   },
 
   // Fetch subjective perceptions list
-  async fetchPerceptions() {
-    const res = await fetch(`${API_BASE_URL}/perceptions/`, {
+  async fetchPerceptions(playerId = null) {
+    let url = `${API_BASE_URL}/perceptions/`;
+    if (playerId) {
+      url += `?player_id=${playerId}`;
+    }
+    const res = await fetch(url, {
       headers: getAuthHeaders()
     });
     if (!res.ok) throw new Error('Failed to fetch perceptions');
+    return res.json();
+  },
+
+  // Fetch specific player details
+  async fetchPlayerDetails(playerId) {
+    const cleanId = String(playerId).replace('#', '');
+    const res = await fetch(`${API_BASE_URL}/players/${cleanId}/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch player details');
     return res.json();
   },
 

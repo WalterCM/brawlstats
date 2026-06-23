@@ -73,3 +73,8 @@ export const getRankIconUrl = (rankId) => {
   const assetId = 58000000 + (numId - 1);
   return `https://cdn.brawlify.com/ranked/tiered/${assetId}.png`;
 };
+
+export const getMapImage = (maps, id) => {
+  const found = maps.find(m => String(m.id) === String(id));
+  return found ? found.image_url : '';
+};

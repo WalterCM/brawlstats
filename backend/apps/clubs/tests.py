@@ -255,3 +255,43 @@ class ClubForumTests(APITestCase):
         leaderboard = response.data['leaderboard']
         self.assertEqual(leaderboard[0]['played'], 2)
         self.assertEqual(leaderboard[0]['wins'], 1)
+
+    def test_member_stats_permissions(self):
+        from apps.core.models import Player, Map, Brawler
+        from apps.matches.models import Match
+
+        # Create another player
+        player2 = Player.objects.create(name='Leon', player_tag='#LEON222', supabase_auth_id='django-user-leon')
+        
+        # Create map and brawler
+        shelly = Brawler.objects.create(id="10", name="Shelly", class_name="Damage Dealer")
+        map_gem = Map.objects.create(id="10", name="Stone Fort", mode="gemGrab")
+
+        # Player 2 creates a match
+        Match.objects.create(
+            player=player2, map=map_gem, my_brawler=shelly, mode='gemGrab', result='victory', draft_type='normal', my_brawler_trophies=600
+        )
+        
+        # Initially, self.player1 (authenticated) requests player2's matches -> should return 0 matches
+        response = self.client.get('/api/matches/', {'player_id': player2.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 0)
+
+        # Retrieve player2's details directly -> should be 403 Forbidden
+        response = self.client.get(f'/api/players/{player2.id}/')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Now, create a club and add both to it (active & approved)
+        club = Club.objects.create(name='Brawl Champions', tag='#CHAMP123')
+        ClubMember.objects.create(club=club, player=self.player1, role='president', is_approved=True)
+        ClubMember.objects.create(club=club, player=player2, role='member', is_approved=True)
+
+        # Retrieve player2's details again -> should succeed
+        response = self.client.get(f'/api/players/{player2.id}/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['name'], 'Leon')
+
+        # Request player2's matches -> should return 1 match
+        response = self.client.get('/api/matches/', {'player_id': player2.id})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 1)

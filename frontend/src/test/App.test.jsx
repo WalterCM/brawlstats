@@ -103,6 +103,34 @@ const { mockApi, mockSetGlobalActiveUser } = vi.hoisted(() => {
     fetchMatches: vi.fn().mockResolvedValue(mockData.matches),
     savePerception: vi.fn().mockResolvedValue({ id: 1 }),
     fetchPerceptions: vi.fn().mockResolvedValue(mockData.perceptions),
+    fetchPlayerDetails: vi.fn().mockResolvedValue({ id: 2, name: 'PlayerTwo', player_tag: '#P2', avatar_id: '1' }),
+    fetchMyClub: vi.fn().mockResolvedValue({
+      in_club: true,
+      is_approved: true,
+      role: 'president',
+      club: {
+        id: 1,
+        name: 'Brawl Champions',
+        tag: '#CHAMP123',
+        members: [
+          { id: 10, player: 2, player_name: 'PlayerTwo', role: 'member', is_approved: true, is_active: true, avatar_id: '1' },
+          { id: 11, player: 1, player_name: 'TestPlayer', role: 'president', is_approved: true, is_active: true, avatar_id: '2' }
+        ]
+      }
+    }),
+    fetchClubStats: vi.fn().mockResolvedValue({
+      total_matches: 15,
+      overall_win_rate: 66.7,
+      leaderboard: [
+        { player_id: 2, name: 'PlayerTwo', avatar_id: '1', played: 10, wins: 8, defeats: 2, win_rate: 80.0, role: 'member', ranked_played: 0, ranked_win_rate: 0, recent_played: 0, recent_win_rate: 0 },
+        { player_id: 1, name: 'TestPlayer', avatar_id: '2', played: 5, wins: 3, defeats: 2, win_rate: 60.0, role: 'president', ranked_played: 0, ranked_win_rate: 0, recent_played: 0, recent_win_rate: 0 }
+      ],
+      modes: [],
+      brawlers: []
+    }),
+    fetchClubForumThreads: vi.fn().mockResolvedValue([]),
+    fetchForumCategories: vi.fn().mockResolvedValue([]),
+    fetchUnlinkedProfiles: vi.fn().mockResolvedValue({ unlinked_users: [], unlinked_players: [] }),
     login: vi.fn().mockResolvedValue(mockData.loginResult),
     register: vi.fn().mockResolvedValue(mockData.loginResult),
     fetchPlayerList: vi.fn().mockResolvedValue(mockData.playerList),
@@ -349,6 +377,28 @@ describe('Stats Dashboard & Battle Log', () => {
     await userEvent.click(screen.getAllByText(/Gem Grab/i)[0])
     expect(await screen.findByText(/Brawler Performance in Gem Grab/i)).toBeInTheDocument()
   })
+
+  it('navigates to member stats view from club roster list', async () => {
+    render(<App />)
+    await waitForWelcome()
+    
+    // Navigate to club page
+    await userEvent.click(screen.getByText('🛡️ My Club'))
+    
+    // Switch to Roster tab
+    const rosterTabBtn = await screen.findByText('👥 Roster')
+    await userEvent.click(rosterTabBtn)
+
+    // Find member in roster and click their name
+    const memberName = await screen.findByText('PlayerTwo')
+    await userEvent.click(memberName)
+
+    // Verify it fetches details of target player 2 and displays Member Stats View
+    await waitFor(() => {
+      expect(mockApi.fetchPlayerDetails).toHaveBeenCalledWith('2')
+    })
+    expect(await screen.findByText(/Welcome, PlayerTwo!/i)).toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -359,30 +409,41 @@ describe('Profile View', () => {
     localStorage.setItem('brawl_active_user', JSON.stringify({ id: 'test', token: 'test-token-123', name: 'TestPlayer' }))
   })
 
-  it('opens profile view from dropdown', async () => {
+  it('opens settings view from dropdown', async () => {
     render(<App />)
     await waitForWelcome()
 
     const profileBtn = screen.getByRole('button', { name: /player.*testplayer/i })
     await userEvent.click(profileBtn)
-    await screen.findByText(/view profile/i)
-    await userEvent.click(screen.getByText(/view profile/i))
+    await screen.findByText(/settings/i)
+    await userEvent.click(screen.getByText(/settings/i))
     expect(await screen.findByText(/player profile/i)).toBeInTheDocument()
   })
 
-  it('profile view shows settings fields', async () => {
+  it('settings view shows settings fields', async () => {
     render(<App />)
     await waitForWelcome()
 
     const profileBtn = screen.getByRole('button', { name: /player.*testplayer/i })
     await userEvent.click(profileBtn)
-    await screen.findByText(/view profile/i)
-    await userEvent.click(screen.getByText(/view profile/i))
+    await screen.findByText(/settings/i)
+    await userEvent.click(screen.getByText(/settings/i))
     await waitFor(() => {
       expect(screen.getByText(/display name/i)).toBeInTheDocument()
       expect(screen.getByText(/player tag/i)).toBeInTheDocument()
       expect(screen.getByText(/min ingest trophies/i)).toBeInTheDocument()
     })
+  })
+
+  it('opens stats dashboard from View Profile option', async () => {
+    render(<App />)
+    await waitForWelcome()
+
+    const profileBtn = screen.getByRole('button', { name: /player.*testplayer/i })
+    await userEvent.click(profileBtn)
+    await screen.findByText(/view profile/i)
+    await userEvent.click(screen.getByText(/view profile/i))
+    expect(await screen.findByText(/Welcome, TestPlayer!/i)).toBeInTheDocument()
   })
 })
 

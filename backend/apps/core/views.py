@@ -87,6 +87,42 @@ class PlayerMeView(views.APIView):
             return response.Response(serializer.data)
         return response.Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+class PlayerDetailView(views.APIView):
+    permission_classes = [IsSupabaseAuthenticated]
+
+    def get(self, request, pk):
+        player = None
+        if isinstance(pk, int) or (isinstance(pk, str) and pk.isdigit()):
+            player = Player.objects.filter(pk=int(pk)).first()
+        
+        if not player:
+            tag = pk
+            if not tag.startswith('#'):
+                tag = '#' + tag
+            player = Player.objects.filter(player_tag__iexact=tag).first()
+
+        if not player:
+            return response.Response({'error': 'Player not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if player.id == request.player.id:
+            return response.Response(PlayerSerializer(player).data)
+
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+        if not is_site_admin:
+            try:
+                from apps.clubs.models import ClubMember
+                my_membership = request.player.club_membership
+                target_membership = player.club_membership
+                if not (my_membership.club_id == target_membership.club_id and 
+                        my_membership.is_approved and my_membership.is_active and
+                        target_membership.is_approved and target_membership.is_active):
+                    return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+            except (AttributeError, ClubMember.DoesNotExist):
+                return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        return response.Response(PlayerSerializer(player).data)
+
 class PasswordlessAccessView(views.APIView):
     permission_classes = [AllowAny]
 

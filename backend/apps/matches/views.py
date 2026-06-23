@@ -11,7 +11,27 @@ class MatchViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSupabaseAuthenticated]
 
     def get_queryset(self):
-        return Match.objects.filter(player=self.request.player).order_by('-date')
+        request_player = self.request.player
+        target_player_id = self.request.query_params.get('player_id')
+        
+        if target_player_id and str(target_player_id) != str(request_player.id):
+            user = self.request.user
+            is_site_admin = user and (user.is_staff or user.is_superuser)
+            if is_site_admin:
+                return Match.objects.filter(player_id=target_player_id).order_by('-date')
+            try:
+                from apps.clubs.models import ClubMember
+                my_membership = request_player.club_membership
+                target_membership = ClubMember.objects.get(player_id=target_player_id)
+                if (my_membership.club_id == target_membership.club_id and 
+                    my_membership.is_approved and my_membership.is_active and
+                    target_membership.is_approved and target_membership.is_active):
+                    return Match.objects.filter(player_id=target_player_id).order_by('-date')
+            except (AttributeError, ClubMember.DoesNotExist):
+                pass
+            return Match.objects.none()
+
+        return Match.objects.filter(player=request_player).order_by('-date')
 
     @action(detail=False, methods=['post'], url_path='submit-series')
     def submit_series(self, request):
