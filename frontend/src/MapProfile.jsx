@@ -49,6 +49,7 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
   const mapData = allMaps.find(m => String(m.id) === String(mapId));
   const [suggestions, setSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
+  const [showMapLightbox, setShowMapLightbox] = useState(false);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -202,20 +203,30 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
   const modeCfg = getModeConfig(mapData.mode);
 
   return (
-    <div className="stats-dashboard-container">
+    <div 
+      className="stats-dashboard-container"
+      style={mapData.image_url ? {
+        backgroundImage: `linear-gradient(180deg, rgba(10, 10, 10, 0.85) 0%, rgba(10, 10, 10, 0.97) 100%), url(${mapData.image_url})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+        borderRadius: '16px',
+        padding: '24px'
+      } : {}}
+    >
 
       {/* ── Sticky Header ── */}
-      <div className="dashboard-header glass-panel mp-header">
-        <div className="mp-header-img-wrap">
+      <div className="dashboard-header glass-panel mp-header" style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '20px' }}>
+        <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(0,229,255,0.12)', border: '3px solid var(--color-ally)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
           {mapData.image_url
-            ? <img src={mapData.image_url} alt={mapData.name} className="mp-header-img" />
-            : <div className="mp-header-img-placeholder">{modeCfg.icon}</div>
+            ? <img src={mapData.image_url} alt={mapData.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            : <div style={{ fontSize: '1.8rem' }}>{modeCfg.icon}</div>
           }
         </div>
 
-        <div className="mp-header-info">
+        <div className="mp-header-info" style={{ flex: 1 }}>
           <div className="mp-header-title-row">
-            <h2 className="mp-title">{mapData.name}</h2>
+            <h2 className="mp-title" style={{ margin: 0 }}>{mapData.name}</h2>
             <span className="mp-mode-badge" style={{ background: modeCfg.bg, border: `1px solid ${modeCfg.border}`, color: modeCfg.color }}>
               {modeCfg.icon} {mapData.mode}
             </span>
@@ -233,33 +244,30 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
               </span>
             )}
           </div>
-          <p className="mp-header-sub">{total} match{total !== 1 ? 'es' : ''} logged</p>
+          <p className="mp-header-sub" style={{ margin: '4px 0 0' }}>{total} match{total !== 1 ? 'es' : ''} logged</p>
         </div>
 
-        {/* Stats cluster */}
-        <div className="mp-header-stats">
-          <div className="mp-stat-chip" style={{ borderColor: winRate >= 50 ? 'rgba(0,229,255,0.4)' : 'rgba(255,0,85,0.4)' }}>
-            <span className="mp-stat-val" style={{ color: winRate >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
-              {winRate}%
-            </span>
-            <span className="mp-stat-lbl">Win Rate</span>
+        {/* Flat KPI summary aligned to other profiles */}
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginLeft: 'auto', flexWrap: 'wrap' }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '22px', fontWeight: 'bold', color: winRate >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)' }}>{winRate}%</div>
+            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Win Rate</div>
           </div>
-          <div className="mp-stat-chip">
-            <span className="mp-stat-val" style={{ color: 'var(--color-ally)' }}>{wins}</span>
-            <span className="mp-stat-lbl">Wins</span>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '22px', fontWeight: 'bold', color: 'var(--color-ally)' }}>{wins}</div>
+            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Wins</div>
           </div>
-          <div className="mp-stat-chip">
-            <span className="mp-stat-val" style={{ color: 'var(--color-enemy)' }}>{losses}</span>
-            <span className="mp-stat-lbl">Losses</span>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '22px', fontWeight: 'bold', color: 'var(--color-enemy)' }}>{losses}</div>
+            <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Losses</div>
           </div>
           {mvpCount > 0 && (
-            <div className="mp-stat-chip">
-              <span className="mp-stat-val" style={{ color: 'var(--color-gold)' }}>👑 {mvpCount}</span>
-              <span className="mp-stat-lbl">MVP</span>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '22px', fontWeight: 'bold', color: 'var(--color-gold)' }}>👑 {mvpCount}</div>
+              <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MVPs</div>
             </div>
           )}
         </div>
-        <button className="btn btn-secondary mp-back-btn" onClick={onBack}>◀ Back</button>
       </div>
 
       {/* ── Secondary stats bar ── */}
@@ -521,6 +529,62 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
           {/* ── Right sidebar ── */}
           <div className="dashboard-sidebar" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
+            {/* 🗺️ Large Map Showcase Card */}
+            {mapData.image_url && (
+              <div className="dashboard-section glass-panel" style={{ padding: '14px', position: 'relative', overflow: 'hidden' }}>
+                <h3 style={{ margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span>🗺️</span> Map Layout
+                </h3>
+                <div 
+                  className="mp-showcase-image-container"
+                  style={{
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    background: 'rgba(0,0,0,0.2)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    cursor: 'zoom-in',
+                    position: 'relative',
+                    aspectRatio: '3 / 4',
+                    maxHeight: '400px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  onClick={() => setShowMapLightbox(true)}
+                >
+                  <img 
+                    src={mapData.image_url} 
+                    alt={mapData.name} 
+                    className="mp-showcase-image"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                      transition: 'transform 0.3s ease',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.05)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
+                  />
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    right: '8px',
+                    background: 'rgba(0,0,0,0.65)',
+                    padding: '4px 8px',
+                    borderRadius: '6px',
+                    fontSize: '10px',
+                    color: '#fff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    pointerEvents: 'none'
+                  }}>
+                    🔍 Click to expand
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Draft Pick/Ban Frequency — Ranked Meta Insights */}
             {(topPicks.allied.length > 0 || topPicks.enemy.length > 0 || topPicks.bans.length > 0) && (
               <div className="dashboard-section glass-panel">
@@ -651,6 +715,65 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
           </div>
         </div>
         </>
+      )}
+      {/* Lightbox Modal */}
+      {showMapLightbox && mapData.image_url && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.9)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            cursor: 'zoom-out'
+          }}
+          onClick={() => setShowMapLightbox(false)}
+        >
+          <div style={{ position: 'relative', maxWidth: '90%', maxHeight: '90%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <button 
+              style={{
+                position: 'absolute',
+                top: '-40px',
+                right: '0',
+                background: 'rgba(255,255,255,0.1)',
+                border: 'none',
+                color: '#fff',
+                fontSize: '20px',
+                width: '36px',
+                height: '36px',
+                borderRadius: '50%',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onClick={() => setShowMapLightbox(false)}
+            >
+              ✕
+            </button>
+            <img 
+              src={mapData.image_url} 
+              alt={mapData.name} 
+              style={{ 
+                maxWidth: '100%', 
+                maxHeight: '80vh', 
+                borderRadius: '8px', 
+                boxShadow: '0 0 30px rgba(0,0,0,0.8)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                objectFit: 'contain'
+              }} 
+            />
+            <div style={{ marginTop: '15px', color: '#fff', fontSize: '1.2rem', fontWeight: 'bold', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+              {mapData.name} ({mapData.mode})
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

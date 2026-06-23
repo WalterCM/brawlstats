@@ -1174,3 +1174,87 @@
   text-decoration: underline;
 }
 
+/* Brawlers Popularity Grid & Cards */
+.brawlers-popularity-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 15px;
+  margin-top: 15px;
+}
+
+.brawler-popularity-card {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 12px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.brawler-popularity-card:hover {
+  transform: translateY(-3px);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(0, 229, 255, 0.3);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
+.brawler-card-avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  object-fit: cover;
+  transition: border-color 0.2s;
+}
+
+.brawler-popularity-card:hover .brawler-card-avatar {
+  border-color: var(--color-ally);
+}
+
+.brawler-card-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.brawler-card-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: center;
+}
+
+.brawler-card-percentage {
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--color-ally);
+}
+
+.brawler-card-games {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.brawler-card-avatar-fallback {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--color-gold);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+}
+

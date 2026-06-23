@@ -59,12 +59,14 @@ const PAGE_SIZE = 20;
 const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) => {
   const [filterMode, setFilterMode] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showRankedOnly, setShowRankedOnly] = useState(false);
   const [page, setPage] = useState(0);
   const searchRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       setSearchQuery('');
+      setShowRankedOnly(false);
       setPage(0);
       setTimeout(() => searchRef.current?.focus(), 100);
     }
@@ -81,7 +83,7 @@ const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) =
 
   useEffect(() => {
     setPage(0);
-  }, [filterMode, searchQuery]);
+  }, [filterMode, searchQuery, showRankedOnly]);
 
   if (!isOpen) return null;
 
@@ -91,7 +93,8 @@ const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) =
       const normMode = filterMode.toLowerCase().replace(/[^a-z0-9]/g, '');
       return m.mode && m.mode.toLowerCase().replace(/[^a-z0-9]/g, '') === normMode;
     })
-    .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    .filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(m => !showRankedOnly || m.is_ranked);
 
   const pageCount = Math.max(1, Math.ceil(filteredMaps.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount - 1);
@@ -118,19 +121,31 @@ const MapSelectorModal = ({ isOpen, maps, selectedMap, onSelectMap, onClose }) =
         </div>
 
         {/* ── Search Bar ── */}
-        <div className="msm-search-wrapper">
-          <span className="msm-search-icon">🔍</span>
-          <input
-            ref={searchRef}
-            type="text"
-            className="msm-search-input"
-            placeholder="Search by map name…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button className="msm-search-clear" onClick={() => setSearchQuery('')}>✕</button>
-          )}
+        <div className="msm-search-wrapper" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <span className="msm-search-icon" style={{ left: '14px' }}>🔍</span>
+            <input
+              ref={searchRef}
+              type="text"
+              className="msm-search-input"
+              style={{ paddingLeft: '38px' }}
+              placeholder="Search by map name…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="msm-search-clear" style={{ right: '14px' }} onClick={() => setSearchQuery('')}>✕</button>
+            )}
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.88rem', color: '#c084fc', fontWeight: 'bold', padding: '10px 14px', background: 'rgba(168, 85, 247, 0.08)', borderRadius: '10px', border: '1px solid rgba(168, 85, 247, 0.2)', userSelect: 'none', whiteSpace: 'nowrap' }}>
+            <input
+              type="checkbox"
+              checked={showRankedOnly}
+              onChange={(e) => setShowRankedOnly(e.target.checked)}
+              style={{ cursor: 'pointer', accentColor: '#a855f7', width: '16px', height: '16px' }}
+            />
+            <span>🏆 Ranked Only</span>
+          </label>
         </div>
 
         {/* ── Mode Tabs ── */}

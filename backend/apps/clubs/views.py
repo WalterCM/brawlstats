@@ -662,7 +662,7 @@ class ClubViewSet(viewsets.ModelViewSet):
         )
 
         from apps.matches.models import Match
-        from django.db.models import Count, Q, Avg
+        from django.db.models import Count, Q, Avg, Max
         from django.utils import timezone
         from datetime import timedelta
 
@@ -699,6 +699,29 @@ class ClubViewSet(viewsets.ModelViewSet):
                 cutoff = timezone.now() - timedelta(days=days)
                 matches = matches.filter(date__gte=cutoff)
 
+        # Apply level / trophy / rank filters if present in query params
+        level_min = request.query_params.get('level_min')
+        level_max = request.query_params.get('level_max')
+        selected_tiers = request.query_params.get('selected_tiers')
+
+        if level_min is not None and level_min != '':
+            try:
+                matches = matches.filter(my_brawler_trophies__gte=int(level_min))
+            except ValueError:
+                pass
+        if level_max is not None and level_max != '':
+            try:
+                matches = matches.filter(my_brawler_trophies__lte=int(level_max))
+            except ValueError:
+                pass
+        if selected_tiers is not None and selected_tiers != '':
+            try:
+                tier_ids = [int(x) for x in selected_tiers.split(',') if x.strip()]
+                if tier_ids:
+                    matches = matches.filter(my_brawler_trophies__in=tier_ids)
+            except ValueError:
+                pass
+
         total_matches = matches.count()
         victories = matches.filter(result='victory').count()
         overall_win_rate = (victories / total_matches * 100) if total_matches > 0 else 0
@@ -721,7 +744,7 @@ class ClubViewSet(viewsets.ModelViewSet):
         brawler_data = matches.values('my_brawler__id', 'my_brawler__name').annotate(
             played=Count('id'),
             wins=Count('id', filter=Q(result='victory'))
-        ).order_by('-played')[:5]
+        ).order_by('-played')
 
         brawlers_list = []
         for b in brawler_data:
@@ -730,14 +753,33 @@ class ClubViewSet(viewsets.ModelViewSet):
                     'id': b['my_brawler__id'],
                     'name': b['my_brawler__name'],
                     'played': b['played'],
-                    'win_rate': (b['wins'] / b['played'] * 100) if b['played'] > 0 else 0
+                    'win_rate': (b['wins'] / b['played'] * 100) if b['played'] > 0 else 0,
+                    'popularity_rate': (b['played'] / total_matches * 100) if total_matches > 0 else 0
+                })
+
+        map_data = matches.values('map__id', 'map__name', 'map__image_url', 'mode').annotate(
+            played=Count('id'),
+            wins=Count('id', filter=Q(result='victory'))
+        ).order_by('-played')
+
+        maps_list = []
+        for m in map_data:
+            if m['map__id']:
+                maps_list.append({
+                    'id': m['map__id'],
+                    'name': m['map__name'],
+                    'image_url': m['map__image_url'],
+                    'mode': m['mode'],
+                    'played': m['played'],
+                    'win_rate': (m['wins'] / m['played'] * 100) if m['played'] > 0 else 0
                 })
 
         member_stats = matches.values('player__id').annotate(
             played=Count('id'),
             wins=Count('id', filter=Q(result='victory')),
             star_player=Count('id', filter=Q(is_star_player=True)),
-            avg_trophies=Avg('my_brawler_trophies'),
+            avg_trophies=Avg('my_brawler_trophies', filter=Q(draft_type='normal')),
+            max_rank=Max('my_brawler_trophies', filter=Q(draft_type='ranked')),
             ranked_played=Count('id', filter=Q(draft_type='ranked')),
             ranked_wins=Count('id', filter=Q(draft_type='ranked', result='victory')),
             normal_played=Count('id', filter=Q(draft_type='normal')),
@@ -781,6 +823,7 @@ class ClubViewSet(viewsets.ModelViewSet):
                 'win_rate': (wins / played * 100) if played > 0 else 0,
                 'star_player': s.get('star_player', 0) or 0,
                 'avg_trophies': round(s.get('avg_trophies', 0) or 0),
+                'max_rank': s.get('max_rank', 0) or 0,
                 'ranked_played': ranked_played,
                 'ranked_wins': ranked_wins,
                 'ranked_win_rate': (ranked_wins / ranked_played * 100) if ranked_played > 0 else 0,
@@ -798,6 +841,7 @@ class ClubViewSet(viewsets.ModelViewSet):
             'played': lambda x: (x['played'], x['win_rate']),
             'star_player': lambda x: (x['star_player'], x['win_rate']),
             'avg_trophies': lambda x: (x['avg_trophies'], x['win_rate']),
+            'max_rank': lambda x: (x['max_rank'], x['win_rate']),
             'ranked_win_rate': lambda x: (x['ranked_win_rate'], x['ranked_played']),
             'recent_win_rate': lambda x: (x['recent_win_rate'], x['recent_played']),
             'name': lambda x: (x['name'],),
@@ -810,6 +854,7 @@ class ClubViewSet(viewsets.ModelViewSet):
             'overall_win_rate': overall_win_rate,
             'modes': modes,
             'brawlers': brawlers_list,
+            'maps': maps_list,
             'sort_by': sort_by,
             'leaderboard': leaderboard
         })

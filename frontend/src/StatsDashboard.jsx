@@ -4,7 +4,7 @@ import { getRankById, getRankIconUrl } from './utils/helpers';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
 import MatchFilterBar from './components/MatchFilterBar';
 
-export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onClose, onBrawlerClick, onMapClick, onModeClick, onBrowseMaps, playerName, isOwnProfile = true }) {
+export default function StatsDashboard({ matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onClose, onBrawlerClick, onMapClick, onModeClick, onBrowseMaps, playerName, playerAvatar, playerTag, isOwnProfile = true }) {
   const {
     selectedMode,
     setSelectedMode,
@@ -24,6 +24,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
   const [brawlerSort, setBrawlerSort] = useState('games'); // 'games', 'winrate', 'trophies'
   const [brawlerPage, setBrawlerPage] = useState(0);
   const [sessionPage, setSessionPage] = useState(0);
+  const [showVisuals, setShowVisuals] = useState(true);
 
   useEffect(() => { setBrawlerPage(0); }, [brawlerSort, selectedMode, selectedDraftType, selectedClass, timeRange]);
 
@@ -138,7 +139,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
 
     // Average trophies — ONLY normal matches (ranked reports rank level, not real trophies)
     const trophyMatches = filteredMatches.filter(
-      m => m.my_brawler_trophies !== null && m.my_brawler_trophies > 50 && m.draft_type === 'normal'
+      m => m.my_brawler_trophies !== null && m.draft_type === 'normal'
     );
 
     // Player rank — most common rank level from ranked matches
@@ -210,7 +211,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
     const normalWins = normalMatches.filter(m => m.result === 'victory').length;
     const rankedWins = rankedMatches.filter(m => m.result === 'victory').length;
 
-    const normalTrophies = normalMatches.filter(m => m.my_brawler_trophies && m.my_brawler_trophies > 50);
+    const normalTrophies = normalMatches.filter(m => m.my_brawler_trophies !== null && m.my_brawler_trophies !== undefined);
     const avgNormalTrophies = normalTrophies.length > 0
       ? Math.round(normalTrophies.reduce((acc, m) => acc + m.my_brawler_trophies, 0) / normalTrophies.length)
       : 0;
@@ -290,7 +291,7 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
         groups[bid].lastDraftType = m.draft_type;
         groups[bid].lastTrophies = m.my_brawler_trophies;
       }
-      if (m.my_brawler_trophies && m.draft_type === 'normal' && m.my_brawler_trophies > 50) {
+      if (m.my_brawler_trophies !== null && m.draft_type === 'normal') {
         groups[bid].trophiesSum += m.my_brawler_trophies;
         groups[bid].trophiesCount++;
       }
@@ -452,12 +453,47 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
 
   return (
     <div className="stats-dashboard-container">
-      <div className="dashboard-header glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <div className="dashboard-title-section">
-          <h2>📊 Personal Stats Dashboard</h2>
-          <p className="welcome-subtitle">{playerName ? `Welcome, ${playerName}! ` : ''}Advanced Analytics &amp; Match History Insights</p>
+      <div className="dashboard-header glass-panel" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '16px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {playerAvatar ? (
+            <img 
+              src={`https://cdn.brawlify.com/profile-icons/regular/${playerAvatar}.png`} 
+              alt="" 
+              style={{ width: '56px', height: '56px', borderRadius: '50%', border: '3px solid var(--accent-primary)', background: 'rgba(255,255,255,0.05)', flexShrink: 0 }}
+            />
+          ) : (
+            <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: 'rgba(255,255,255,0.08)', border: '2px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '28px', flexShrink: 0 }}>👤</div>
+          )}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: 800 }}>
+                {playerName || 'Player Profile'}
+              </h2>
+              <span className="mp-mode-badge" style={{ background: 'rgba(0, 229, 255, 0.12)', border: '1px solid rgba(0, 229, 255, 0.35)', color: '#00e5ff', fontSize: '11px', padding: '4px 10px', borderRadius: '20px', fontWeight: 'bold' }}>
+                📊 Gameplay Insights
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', margin: '6px 0 0 0', fontSize: '0.8rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              {playerTag && (
+                <>
+                  <span>Tag: <strong style={{ color: '#fff' }}>{playerTag}</strong></span>
+                  <span>|</span>
+                </>
+              )}
+              <span>Matches: <strong style={{ color: '#fff' }}>{matches.length}</strong></span>
+              <span>|</span>
+              <span>Account: <strong style={{ color: isOwnProfile ? 'var(--color-ally)' : 'var(--color-gold)' }}>{isOwnProfile ? 'Personal' : 'Club Member'}</strong></span>
+            </div>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <button 
+            className="btn btn-secondary btn-sm" 
+            onClick={() => setShowVisuals(!showVisuals)}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', padding: '6px 12px' }}
+          >
+            {showVisuals ? '👁️ Hide Visual Analytics' : '👁️ Show Visual Analytics'}
+          </button>
           {onClose && (
             <button className="btn btn-secondary" onClick={onClose}>
               ◀ Back to Home
@@ -466,8 +502,10 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
         </div>
       </div>
 
-      {/* KPI Section */}
-      <div className="kpi-grid" style={{ marginBottom: '20px' }}>
+      {showVisuals && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginBottom: '20px' }}>
+          {/* KPI Section */}
+          <div className="kpi-grid" style={{ marginBottom: 0 }}>
         <div className="kpi-card glass-panel glow-ally">
           <div className="kpi-icon-wrapper circle-ally">🏆</div>
           <div className="kpi-details">
@@ -670,6 +708,9 @@ export default function StatsDashboard({ matches = [], perceptions = [], brawler
               </svg>
             );
           })()}
+        </div>
+      )}
+
         </div>
       )}
 

@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from './services/api';
 import { useFilters } from './context/FilterContext';
 import './ClubDashboard.css';
+import { getRankById, getRankIconUrl, getBrawlerAvatar, getModeIcon } from './utils/helpers';
 
 
 export default function ClubDashboard({
@@ -25,7 +26,10 @@ export default function ClubDashboard({
     selectedMode,
     selectedDraftType,
     selectedClass,
-    timeRange
+    timeRange,
+    levelMin,
+    levelMax,
+    selectedTiers
   } = useFilters();
   const { tag } = useParams();
   const [loading, setLoading] = useState(true);
@@ -76,6 +80,40 @@ export default function ClubDashboard({
 
   // Internal tab for club pages (stats/roster)
   const [activeClubTab, setActiveClubTab] = useState('stats');
+
+  const topPerformanceBrawlers = useMemo(() => {
+    if (!clubStats || !clubStats.brawlers) return [];
+    const filtered = clubStats.brawlers.filter(b => b.played >= 2);
+    const source = filtered.length > 0 ? filtered : clubStats.brawlers.filter(b => b.played >= 1);
+    return [...source].sort((a, b) => b.win_rate - a.win_rate || b.played - a.played);
+  }, [clubStats]);
+
+  const mostPopularBrawlers = useMemo(() => {
+    if (!clubStats || !clubStats.brawlers) return [];
+    return [...clubStats.brawlers].sort((a, b) => b.played - a.played || b.win_rate - a.win_rate);
+  }, [clubStats]);
+
+  const memberTopBrawlers = useMemo(() => {
+    if (!clubStats || !clubStats.leaderboard) return [];
+    const counts = {};
+    clubStats.leaderboard.forEach(m => {
+      if (m.top_brawler) {
+        counts[m.top_brawler] = (counts[m.top_brawler] || 0) + 1;
+      }
+    });
+    const totalMembers = clubStats.leaderboard.filter(m => m.top_brawler).length;
+    return Object.entries(counts)
+      .map(([name, count]) => {
+        const pct = totalMembers > 0 ? (count / totalMembers) * 100 : 0;
+        return { name, count, percentage: pct };
+      })
+      .sort((a, b) => b.count - a.count || b.name.localeCompare(a.name));
+  }, [clubStats]);
+
+  const getAvatarByName = (name) => {
+    const found = brawlers.find(b => b.name.toLowerCase() === name.toLowerCase());
+    return found ? found.image_url : null;
+  };
 
   // Forum create category form
   const [showNewCategoryForm, setShowNewCategoryForm] = useState(false);
@@ -154,7 +192,10 @@ export default function ClubDashboard({
         mode: selectedMode,
         draft_type: selectedDraftType,
         brawler_class: selectedClass,
-        time_range: timeRange
+        time_range: timeRange,
+        level_min: levelMin,
+        level_max: levelMax,
+        selected_tiers: selectedTiers
       };
       const stats = await api.fetchClubStats(clubId, s, filters);
       setClubStats(stats);
@@ -169,7 +210,7 @@ export default function ClubDashboard({
     if (clubStatus.club && clubStatus.club.id) {
       loadClubStats(clubStatus.club.id);
     }
-  }, [selectedMode, selectedDraftType, selectedClass, timeRange]);
+  }, [selectedMode, selectedDraftType, selectedClass, timeRange, levelMin, levelMax, selectedTiers]);
 
   const handleSyncRoster = async () => {
     if (!clubStatus.club) return;
@@ -757,6 +798,7 @@ export default function ClubDashboard({
                         <option value="recent_win_rate">Recent WR (7d)</option>
                         <option value="star_player">Star Player</option>
                         <option value="avg_trophies">Avg Trophies</option>
+                        <option value="max_rank">Rank</option>
                         <option value="name">Name</option>
                       </select>
                     </div>
@@ -767,13 +809,13 @@ export default function ClubDashboard({
                             <th>#</th>
                             <th>Player</th>
                             <th>Role</th>
-                            <th>W</th>
-                            <th>L</th>
+                            <th>Played</th>
                             <th>WR</th>
                             <th>Ranked WR</th>
                             <th>Recent WR</th>
                             <th>☆</th>
                             <th>Avg 🏆</th>
+                            <th>Rank</th>
                             <th>Top Brawler</th>
                           </tr>
                         </thead>
@@ -798,8 +840,7 @@ export default function ClubDashboard({
                                 </div>
                               </td>
                               <td>{member.role ? <span className={`role-badge ${member.role}`}>{member.role.replace('_', ' ')}</span> : '-'}</td>
-                              <td>{member.wins}</td>
-                              <td>{member.defeats}</td>
+                              <td>{member.played}</td>
                               <td className={member.win_rate >= 55 ? 'wr-high' : member.win_rate >= 50 ? 'wr-mid' : 'wr-low'}>
                                 {member.win_rate.toFixed(1)}%
                               </td>
@@ -811,6 +852,16 @@ export default function ClubDashboard({
                               </td>
                               <td>{member.star_player}</td>
                               <td>{member.avg_trophies > 0 ? member.avg_trophies : '-'}</td>
+                              <td>
+                                {member.max_rank > 0 ? (
+                                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}>
+                                    {getRankIconUrl(member.max_rank) && (
+                                      <img src={getRankIconUrl(member.max_rank)} alt="" style={{ width: 20, height: 20 }} />
+                                    )}
+                                    <span>{getRankById(member.max_rank)?.name || member.max_rank}</span>
+                                  </div>
+                                ) : '-'}
+                              </td>
                               <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{member.top_brawler || '-'}</td>
                             </tr>
                           ))}
@@ -822,6 +873,86 @@ export default function ClubDashboard({
                         </tbody>
                       </table>
                     </div>
+
+                    {/* Brawler Insights Split View */}
+                    {clubStats.brawlers && clubStats.brawlers.length > 0 && (
+                      <div className="club-brawlers-split-view" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', marginTop: '25px' }}>
+                        {/* Top Performance Brawlers Column */}
+                        <div className="glass-panel club-panel-section" style={{ margin: 0, padding: '15px' }}>
+                          <h3 style={{ marginBottom: '15px', fontSize: '1.05rem', marginTop: 0 }}>⭐ Top Brawlers (by Win Rate)</h3>
+                          <div className="brawlers-popularity-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px' }}>
+                            {topPerformanceBrawlers.slice(0, 8).map(b => {
+                              const avatarUrl = getBrawlerAvatar(brawlers, b.id);
+                              return (
+                                <div key={b.id} className="brawler-popularity-card">
+                                  {avatarUrl ? (
+                                    <img src={avatarUrl} alt={b.name} className="brawler-card-avatar" />
+                                  ) : (
+                                    <div className="brawler-card-avatar-fallback">⭐</div>
+                                  )}
+                                  <span className="brawler-card-name" title={b.name}>{b.name}</span>
+                                  <div className="brawler-card-stats">
+                                    <span className="brawler-card-percentage" style={{ color: 'var(--color-ally)' }}>{b.win_rate.toFixed(0)}% WR</span>
+                                    <span className="brawler-card-games">{b.played} {b.played === 1 ? 'game' : 'games'}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Most Popular Brawlers Column */}
+                        <div className="glass-panel club-panel-section" style={{ margin: 0, padding: '15px' }}>
+                          <h3 style={{ marginBottom: '15px', fontSize: '1.05rem', marginTop: 0 }}>🔥 Most Popular Brawlers (by Usage)</h3>
+                          <div className="brawlers-popularity-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px' }}>
+                            {mostPopularBrawlers.slice(0, 8).map(b => {
+                              const avatarUrl = getBrawlerAvatar(brawlers, b.id);
+                              const popRate = b.popularity_rate != null ? b.popularity_rate : 0;
+                              return (
+                                <div key={b.id} className="brawler-popularity-card">
+                                  {avatarUrl ? (
+                                    <img src={avatarUrl} alt={b.name} className="brawler-card-avatar" />
+                                  ) : (
+                                    <div className="brawler-card-avatar-fallback">🔥</div>
+                                  )}
+                                  <span className="brawler-card-name" title={b.name}>{b.name}</span>
+                                  <div className="brawler-card-stats">
+                                    <span className="brawler-card-percentage">{popRate.toFixed(1)}%</span>
+                                    <span className="brawler-card-games">{b.played} {b.played === 1 ? 'game' : 'games'}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Most Popular Member Top Brawlers */}
+                    {memberTopBrawlers.length > 0 && (
+                      <div className="glass-panel club-panel-section" style={{ marginTop: '25px', padding: '15px' }}>
+                        <h3 style={{ marginBottom: '15px', fontSize: '1.05rem', marginTop: 0 }}>🏆 Most Popular Member Top Brawlers</h3>
+                        <div className="brawlers-popularity-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px' }}>
+                          {memberTopBrawlers.slice(0, 8).map(b => {
+                            const avatarUrl = getAvatarByName(b.name);
+                            return (
+                              <div key={b.name} className="brawler-popularity-card">
+                                {avatarUrl ? (
+                                  <img src={avatarUrl} alt={b.name} className="brawler-card-avatar" />
+                                ) : (
+                                  <div className="brawler-card-avatar-fallback">🏆</div>
+                                )}
+                                <span className="brawler-card-name" title={b.name}>{b.name}</span>
+                                <div className="brawler-card-stats">
+                                  <span className="brawler-card-percentage">{b.percentage.toFixed(1)}%</span>
+                                  <span className="brawler-card-games">{b.count} {b.count === 1 ? 'member' : 'members'}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Top Modes */}
                     {clubStats.modes && clubStats.modes.length > 0 && (
@@ -841,18 +972,23 @@ export default function ClubDashboard({
                       </div>
                     )}
 
-                    {/* Top Brawlers */}
-                    {clubStats.brawlers && clubStats.brawlers.length > 0 && (
-                      <div style={{ marginTop: '25px' }}>
-                        <h3 style={{ marginBottom: '15px', fontSize: '1.1rem' }}>⭐ Most Played Brawlers</h3>
-                        <div className="compact-list">
-                          {clubStats.brawlers.map(b => (
-                            <div key={b.id} className="compact-list-item">
-                              <span className="compact-list-name">{b.name}</span>
-                              <span className="compact-list-stat">{b.played} games</span>
-                              <span className={`compact-list-wr ${b.win_rate >= 55 ? 'wr-high' : b.win_rate >= 50 ? 'wr-mid' : 'wr-low'}`}>
-                                {b.win_rate.toFixed(1)}%
-                              </span>
+                    {/* Map Performance Section */}
+                    {clubStats.maps && clubStats.maps.length > 0 && (
+                      <div className="glass-panel club-panel-section" style={{ marginTop: '25px', padding: '15px' }}>
+                        <h3 style={{ marginBottom: '15px', fontSize: '1.05rem', marginTop: 0 }}>🗺️ Map Win Rates (Top Played)</h3>
+                        <div className="maps-stats-list">
+                          {clubStats.maps.slice(0, 5).map(m => (
+                            <div key={m.id} className="map-stat-row" style={{ cursor: 'pointer' }} onClick={() => navigate(`/stats/map/${m.id}`)}>
+                              <div className="map-detail">
+                                <span className="map-name-lbl">{m.name}</span>
+                                <span className="map-mode-lbl">{getModeIcon(m.mode)} {m.mode}</span>
+                              </div>
+                              <div className="map-games-metric">
+                                <span>{m.played} Games</span>
+                                <span className={`map-wr-badge ${m.win_rate >= 50 ? 'win-badge' : 'loss-badge'}`}>
+                                  {m.win_rate.toFixed(0)}% WR
+                                </span>
+                              </div>
                             </div>
                           ))}
                         </div>

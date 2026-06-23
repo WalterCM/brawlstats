@@ -543,6 +543,11 @@ export const api = {
     if (filters.draft_type && filters.draft_type !== 'All') url += `&draft_type=${encodeURIComponent(filters.draft_type)}`;
     if (filters.brawler_class && filters.brawler_class !== 'All') url += `&brawler_class=${encodeURIComponent(filters.brawler_class)}`;
     if (filters.time_range) url += `&time_range=${encodeURIComponent(filters.time_range)}`;
+    if (filters.level_min != null) url += `&level_min=${encodeURIComponent(filters.level_min)}`;
+    if (filters.level_max != null) url += `&level_max=${encodeURIComponent(filters.level_max)}`;
+    if (filters.selected_tiers && filters.selected_tiers.length > 0) {
+      url += `&selected_tiers=${encodeURIComponent(filters.selected_tiers.join(','))}`;
+    }
 
     const res = await fetch(url, {
       headers: getAuthHeaders()

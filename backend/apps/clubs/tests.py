@@ -237,6 +237,10 @@ class ClubForumTests(APITestCase):
         self.assertEqual(len(leaderboard), 1)
         self.assertEqual(leaderboard[0]['played'], 3)
         self.assertEqual(leaderboard[0]['wins'], 2)
+        # Verify avg_trophies only averages normal matches (500 and 800, excluding the 1000 from ranked match)
+        self.assertEqual(leaderboard[0]['avg_trophies'], 650)
+        # Verify max_rank captures the highest rank from ranked matches
+        self.assertEqual(leaderboard[0]['max_rank'], 1000)
 
         # 2. Filter by mode="gemGrab": Should return total_matches=2, victories=2
         response = self.client.get(f'/api/clubs/{club.id}/stats/', {'mode': 'gemGrab'})
@@ -255,6 +259,30 @@ class ClubForumTests(APITestCase):
         leaderboard = response.data['leaderboard']
         self.assertEqual(leaderboard[0]['played'], 2)
         self.assertEqual(leaderboard[0]['wins'], 1)
+
+        # 5. Filter normal matches by level_min=750: should only include Match 3
+        response = self.client.get(f'/api/clubs/{club.id}/stats/', {'draft_type': 'normal', 'level_min': '750'})
+        leaderboard = response.data['leaderboard']
+        self.assertEqual(leaderboard[0]['played'], 1)
+        self.assertEqual(leaderboard[0]['avg_trophies'], 800)
+
+        # 6. Filter normal matches by level_max=600: should only include Match 2
+        response = self.client.get(f'/api/clubs/{club.id}/stats/', {'draft_type': 'normal', 'level_max': '600'})
+        leaderboard = response.data['leaderboard']
+        self.assertEqual(leaderboard[0]['played'], 1)
+        self.assertEqual(leaderboard[0]['avg_trophies'], 500)
+
+        # 7. Filter ranked matches by selected_tiers=1000: should include Match 1
+        response = self.client.get(f'/api/clubs/{club.id}/stats/', {'draft_type': 'ranked', 'selected_tiers': '1000'})
+        leaderboard = response.data['leaderboard']
+        self.assertEqual(leaderboard[0]['played'], 1)
+        self.assertEqual(leaderboard[0]['max_rank'], 1000)
+
+        # 8. Filter ranked matches by non-matching selected_tiers=500: should return empty leaderboard/no matches for this player
+        response = self.client.get(f'/api/clubs/{club.id}/stats/', {'draft_type': 'ranked', 'selected_tiers': '500'})
+        leaderboard = response.data['leaderboard']
+        player_stats = next((x for x in leaderboard if x['player_id'] == self.player1.id), None)
+        self.assertTrue(player_stats is None or player_stats['played'] == 0)
 
     def test_member_stats_permissions(self):
         from apps.core.models import Player, Map, Brawler

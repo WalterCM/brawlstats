@@ -122,11 +122,14 @@ const { mockApi, mockSetGlobalActiveUser } = vi.hoisted(() => {
       total_matches: 15,
       overall_win_rate: 66.7,
       leaderboard: [
-        { player_id: 2, name: 'PlayerTwo', avatar_id: '1', played: 10, wins: 8, defeats: 2, win_rate: 80.0, role: 'member', ranked_played: 0, ranked_win_rate: 0, recent_played: 0, recent_win_rate: 0 },
-        { player_id: 1, name: 'TestPlayer', avatar_id: '2', played: 5, wins: 3, defeats: 2, win_rate: 60.0, role: 'president', ranked_played: 0, ranked_win_rate: 0, recent_played: 0, recent_win_rate: 0 }
+        { player_id: 2, name: 'PlayerTwo', avatar_id: '1', played: 10, wins: 8, defeats: 2, win_rate: 80.0, role: 'member', ranked_played: 0, ranked_win_rate: 0, recent_played: 0, recent_win_rate: 0, avg_trophies: 650, max_rank: 13 },
+        { player_id: 1, name: 'TestPlayer', avatar_id: '2', played: 5, wins: 3, defeats: 2, win_rate: 60.0, role: 'president', ranked_played: 0, ranked_win_rate: 0, recent_played: 0, recent_win_rate: 0, avg_trophies: 700, max_rank: 10 }
       ],
       modes: [],
-      brawlers: []
+      brawlers: [
+        { id: '16000000', name: 'Shelly', played: 10, win_rate: 80.0, popularity_rate: 66.7 },
+        { id: '16000001', name: 'Colt', played: 5, win_rate: 40.0, popularity_rate: 33.3 }
+      ]
     }),
     fetchClubForumThreads: vi.fn().mockResolvedValue([]),
     fetchForumCategories: vi.fn().mockResolvedValue([]),
@@ -151,7 +154,7 @@ vi.mock('../services/api', () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 async function waitForWelcome() {
-  await screen.findByText(/welcome/i)
+  await screen.findByText(/gameplay insights/i)
 }
 
 async function navigateToDraft() {
@@ -196,7 +199,8 @@ describe('Login Screen (unauthenticated)', () => {
     render(<App />)
     await screen.findByText('PlayerOne')
     await userEvent.click(screen.getByText('PlayerOne'))
-    expect(await screen.findByText(/welcome.*testplayer/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'TestPlayer' })).toBeInTheDocument()
+    expect(screen.getByText(/Gameplay Insights/i)).toBeInTheDocument()
   })
 
   it('transitions to main app after submitting tag via form', async () => {
@@ -205,7 +209,8 @@ describe('Login Screen (unauthenticated)', () => {
     const input = screen.getByPlaceholderText(/enter player tag/i)
     await userEvent.type(input, '#NEW')
     await userEvent.click(screen.getByText('🚀 Load Profile'))
-    expect(await screen.findByText(/welcome.*testplayer/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'TestPlayer' })).toBeInTheDocument()
+    expect(screen.getByText(/Gameplay Insights/i)).toBeInTheDocument()
   })
 
   it('shows error message on failed login', async () => {
@@ -335,7 +340,7 @@ describe('Stats Dashboard & Battle Log', () => {
     render(<App />)
     await waitForWelcome()
     await userEvent.click(screen.getByText('Stats Dashboard'))
-    expect(await screen.findByText(/personal stats dashboard/i)).toBeInTheDocument()
+    expect(await screen.findByText(/gameplay insights/i)).toBeInTheDocument()
   })
 
   it('shows battle log section on menu', async () => {
@@ -373,7 +378,7 @@ describe('Stats Dashboard & Battle Log', () => {
     render(<App />)
     await waitForWelcome()
     await userEvent.click(screen.getByText('Stats Dashboard'))
-    expect(await screen.findByText(/personal stats dashboard/i)).toBeInTheDocument()
+    expect(await screen.findByText(/gameplay insights/i)).toBeInTheDocument()
     await userEvent.click(screen.getAllByText(/Gem Grab/i)[0])
     expect(await screen.findByText(/Brawler Performance in Gem Grab/i)).toBeInTheDocument()
   })
@@ -385,6 +390,15 @@ describe('Stats Dashboard & Battle Log', () => {
     // Navigate to club page
     await userEvent.click(screen.getByText('🛡️ My Club'))
     
+    // Check that Avg Trophies and Rank columns are present in the Stats tab leaderboard
+    expect(await screen.findByText('Avg 🏆')).toBeInTheDocument()
+    expect(await screen.findByRole('columnheader', { name: 'Rank' })).toBeInTheDocument()
+    expect(await screen.findByRole('columnheader', { name: 'Played' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'W' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'L' })).not.toBeInTheDocument()
+    expect(screen.getByText('Mythic I')).toBeInTheDocument()
+    expect(screen.getByText('Diamond I')).toBeInTheDocument()
+
     // Switch to Roster tab
     const rosterTabBtn = await screen.findByText('👥 Roster')
     await userEvent.click(rosterTabBtn)
@@ -397,7 +411,59 @@ describe('Stats Dashboard & Battle Log', () => {
     await waitFor(() => {
       expect(mockApi.fetchPlayerDetails).toHaveBeenCalledWith('2')
     })
-    expect(await screen.findByText(/Welcome, PlayerTwo!/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'PlayerTwo' })).toBeInTheDocument()
+    expect(screen.getByText(/Gameplay Insights/i)).toBeInTheDocument()
+  })
+
+  it('applies global filters to club stats query', async () => {
+    render(<App />)
+    await waitForWelcome()
+
+    // Navigate to club page
+    await userEvent.click(screen.getByText('🛡️ My Club'))
+    await screen.findByText('Avg 🏆')
+
+    // Click Filters to open the global filter bar
+    const filterToggleBtn = screen.getByRole('button', { name: /Filters/i })
+    await userEvent.click(filterToggleBtn)
+
+    // Select "Normal" Draft Format
+    const draftTypeSelect = screen.getByDisplayValue(/All Formats/i)
+    await userEvent.selectOptions(draftTypeSelect, 'Normal')
+
+    // Click "750-999" trophy range button in MatchFilterBar
+    const trophyRangeBtn = await screen.findByRole('button', { name: '750-999' })
+    await userEvent.click(trophyRangeBtn)
+
+    // Verify it fetches club stats with the correct filter params
+    await waitFor(() => {
+      expect(mockApi.fetchClubStats).toHaveBeenLastCalledWith(1, expect.any(String), expect.objectContaining({
+        draft_type: 'Normal',
+        level_min: 750,
+        level_max: 999
+      }))
+    })
+  })
+
+  it('renders most popular brawlers grid with cards showing percentages', async () => {
+    render(<App />)
+    await waitForWelcome()
+
+    // Navigate to club page
+    await userEvent.click(screen.getByText('🛡️ My Club'))
+    
+    // Check that brawler card titles are present
+    expect(await screen.findByText('🔥 Most Popular Brawlers (by Usage)')).toBeInTheDocument()
+    expect(screen.getByText('⭐ Top Brawlers (by Win Rate)')).toBeInTheDocument()
+
+    // Check that cards for Shelly and Colt are visible with their percentages
+    expect(screen.getAllByText('Shelly').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('66.7%').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('10 games').length).toBeGreaterThan(0)
+
+    expect(screen.getAllByText('Colt').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('33.3%').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('5 games').length).toBeGreaterThan(0)
   })
 })
 
@@ -443,7 +509,8 @@ describe('Profile View', () => {
     await userEvent.click(profileBtn)
     await screen.findByText(/view profile/i)
     await userEvent.click(screen.getByText(/view profile/i))
-    expect(await screen.findByText(/Welcome, TestPlayer!/i)).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'TestPlayer' })).toBeInTheDocument()
+    expect(screen.getByText(/Gameplay Insights/i)).toBeInTheDocument()
   })
 })
 

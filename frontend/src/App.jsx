@@ -1186,13 +1186,13 @@ function App() {
 
         <nav className="global-navbar">
           <button 
-            className={`nav-link ${location.pathname === '/' || (location.pathname.startsWith('/stats') && !location.pathname.startsWith('/club')) ? 'active' : ''}`}
+            className={`nav-link ${location.pathname === '/' || (location.pathname.startsWith('/stats') && !location.pathname.startsWith('/stats/member') && !location.pathname.startsWith('/club')) ? 'active' : ''}`}
             onClick={() => navigate('/')}
           >
             📊 My Stats
           </button>
           <button 
-            className={`nav-link ${location.pathname.startsWith('/club') ? 'active' : ''}`}
+            className={`nav-link ${location.pathname.startsWith('/club') || location.pathname.startsWith('/stats/member') ? 'active' : ''}`}
             onClick={() => navigate('/club')}
           >
             🛡️ My Club
@@ -2103,6 +2103,8 @@ function App() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
             <StatsDashboard
               playerName={me?.name || currentUser.name}
+              playerAvatar={me?.avatar_id}
+              playerTag={me?.player_tag}
               matches={matches}
               perceptions={perceptions}
               brawlers={brawlers}
@@ -2250,26 +2252,10 @@ function MemberStatsView({ brawlers, allMaps, brawlerMeta, minNormalTrophies, se
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '30px', padding: '30px 20px', maxWidth: '1200px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(255,255,255,0.02)', padding: '15px 20px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-        <button className="btn btn-secondary btn-sm" onClick={() => navigate(-1)} style={{ marginRight: '10px' }}>
-          ⬅️ Back
-        </button>
-        {memberProfile?.avatar_id ? (
-          <img 
-            src={`https://cdn.brawlify.com/profile-icons/regular/${memberProfile.avatar_id}.png`} 
-            alt="" 
-            style={{ width: '48px', height: '48px', borderRadius: '50%', border: '2px solid var(--accent-primary)' }}
-          />
-        ) : (
-          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>👤</div>
-        )}
-        <div>
-          <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{memberProfile?.name}</h2>
-          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Club Member | Tag: {memberProfile?.player_tag}</span>
-        </div>
-      </div>
       <StatsDashboard
         playerName={memberProfile?.name}
+        playerAvatar={memberProfile?.avatar_id}
+        playerTag={memberProfile?.player_tag}
         matches={memberMatches}
         perceptions={memberPerceptions}
         brawlers={brawlers}
