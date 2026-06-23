@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useFilters } from './context/FilterContext';
 import { api } from './services/api';
-import { getBrawlerAvatar } from './utils/helpers';
+import { getBrawlerAvatar, getRankById, getRankIconUrl } from './utils/helpers';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
 
 const MODE_CONFIG = {
@@ -695,8 +695,19 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
                           }}>
                             {isRanked ? '🏅 Ranked' : '🎮 Normal'}
                           </span>
-                          {m.my_brawler_trophies > 0 && (
-                            <span>🏆 {m.my_brawler_trophies}</span>
+                          {isRanked ? (
+                            m.my_brawler_trophies && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                                {getRankIconUrl(m.my_brawler_trophies) && (
+                                  <img src={getRankIconUrl(m.my_brawler_trophies)} alt="" style={{ width: 12, height: 12 }} />
+                                )}
+                                {getRankById(m.my_brawler_trophies)?.name || m.my_brawler_trophies}
+                              </span>
+                            )
+                          ) : (
+                            m.my_brawler_trophies > 0 && (
+                              <span>🏆 {m.my_brawler_trophies}</span>
+                            )
                           )}
                         </div>
                       </div>
