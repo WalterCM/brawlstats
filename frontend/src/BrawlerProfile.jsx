@@ -2,8 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useFilters } from './context/FilterContext';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
-import MatchFilterBar from './components/MatchFilterBar';
-import { getRankIconUrl } from './utils/helpers';
+import { getRankById, getRankIconUrl } from './utils/helpers';
 
 // Pure SVG rolling win rate line chart
 function RollingWinRateChart({ matches, windowSize = 5, height = 120, width = 400 }) {
@@ -94,7 +93,18 @@ function getModeIcon(mode) {
   return MODE_ICONS_MAP[mode] || '⚔️';
 }
 
-export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack }) {
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
+
+export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [], perceptions = [], brawlers = [], allMaps = [], brawlerMeta = [], minNormalTrophies = 750, onBack, onBrawlerClick, onMapClick, onModeClick }) {
   const params = useParams();
   const brawlerId = propBrawlerId || params.brawlerId;
 
@@ -425,37 +435,6 @@ export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [],
         <button className="btn btn-secondary" onClick={onBack}>◀ Back</button>
       </div>
 
-      <div className="glass-panel" style={{ padding: '10px 16px', marginTop: '12px' }}>
-        <div className="filter-group-row" style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
-          <div className="filter-control" style={{ flex: '1 1 160px' }}>
-            <label>Game Mode</label>
-            <select value={selectedMode} onChange={(e) => setSelectedMode(e.target.value)}>
-              {brawlerModes.map(mode => (
-                <option key={mode} value={mode}>{mode === 'All' ? '🎮 All Modes' : `${getModeIcon(mode)} ${mode}`}</option>
-              ))}
-            </select>
-          </div>
-          <div className="filter-control" style={{ flex: '1 1 160px' }}>
-            <label>Draft Type</label>
-            <select value={selectedDraftType} onChange={(e) => setSelectedDraftType(e.target.value)}>
-              <option value="All">🏆 All Formats</option>
-              <option value="Ranked">Competitive (Ranked)</option>
-              <option value="Normal">Normal (No Bans)</option>
-            </select>
-          </div>
-        </div>
-        <MatchFilterBar
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          draftType={selectedDraftType}
-          levelMin={levelMin}
-          levelMax={levelMax}
-          onLevelChange={({ levelMin: lm, levelMax: lx }) => { setLevelMin(lm); setLevelMax(lx); }}
-          selectedTiers={selectedTiers}
-          onTiersChange={setSelectedTiers}
-          minNormalTrophies={minNormalTrophies}
-        />
-      </div>
 
       {total === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '40px', marginTop: '20px', color: 'var(--color-text-muted)' }}>
@@ -651,13 +630,24 @@ export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [],
               <h3>🎮 Win Rate by Mode</h3>
               <div style={{ marginTop: '12px' }}>
                 {modeStats.map(m => (
-                  <div key={m.mode} className="map-stat-row">
+                  <div 
+                    key={m.mode} 
+                    className="map-stat-row" 
+                    style={{ cursor: onModeClick ? 'pointer' : 'default' }}
+                    onClick={() => onModeClick && onModeClick(m.mode)}
+                  >
                     <div className="map-detail">
-                      <span className="map-name-lbl">{getModeIcon(m.mode)} {m.mode}</span>
+                      <span 
+                        className="map-name-lbl"
+                        onMouseEnter={e => { if (onModeClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                        onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                      >
+                        {getModeIcon(m.mode)} {m.mode}
+                      </span>
                       <span className="map-mode-lbl"></span>
                     </div>
                     <div className="map-games-metric">
-                      <span>{m.games}G</span>
+                      <span>{m.games} Games</span>
                       <span className={`map-wr-badge ${m.winRate >= 50 ? 'win-badge' : 'loss-badge'}`}>{m.winRate}% WR</span>
                     </div>
                   </div>
@@ -673,13 +663,24 @@ export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [],
                 {mapStats.length === 0
                   ? <div className="empty-msg">No map data.</div>
                   : mapStats.map(m => (
-                    <div key={m.mapId} className="map-stat-row">
+                    <div 
+                      key={m.mapId} 
+                      className="map-stat-row" 
+                      style={{ cursor: onMapClick ? 'pointer' : 'default' }}
+                      onClick={() => onMapClick && onMapClick(m.mapId)}
+                    >
                       <div className="map-detail">
-                        <span className="map-name-lbl">{m.name}</span>
-                        <span className="map-mode-lbl">{m.mode}</span>
+                        <span 
+                          className="map-name-lbl"
+                          onMouseEnter={e => { if (onMapClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                          onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                        >
+                          {m.name}
+                        </span>
+                        <span className="map-mode-lbl">{getModeIcon(m.mode)} {m.mode}</span>
                       </div>
                       <div className="map-games-metric">
-                        <span>{m.games}G</span>
+                        <span>{m.games} Games</span>
                         <span className={`map-wr-badge ${m.winRate >= 50 ? 'win-badge' : 'loss-badge'}`}>{m.winRate}% WR</span>
                       </div>
                     </div>
@@ -716,10 +717,19 @@ export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [],
                     {comfortCounts.easiest.map(r => {
                       const b = getBrawler(r.id);
                       return (
-                        <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                        <div 
+                          key={r.id} 
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px', cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                          onClick={() => onBrawlerClick && onBrawlerClick(r.id)}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                             {b?.image_url && <img src={b.image_url} alt={b.name} style={{ width: '16px', height: '16px', borderRadius: '50%' }} />}
-                            <span>{b?.name || '?'}</span>
+                            <span 
+                              onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                              onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                            >
+                              {b?.name || '?'}
+                            </span>
                           </div>
                           <span style={{ color: 'var(--color-ally)', fontWeight: 'bold' }}>+{r.avg.toFixed(1)}</span>
                         </div>
@@ -733,10 +743,19 @@ export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [],
                     {comfortCounts.hardest.map(r => {
                       const b = getBrawler(r.id);
                       return (
-                        <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px' }}>
+                        <div 
+                          key={r.id} 
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', marginBottom: '4px', cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                          onClick={() => onBrawlerClick && onBrawlerClick(r.id)}
+                        >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
                             {b?.image_url && <img src={b.image_url} alt={b.name} style={{ width: '16px', height: '16px', borderRadius: '50%' }} />}
-                            <span>{b?.name || '?'}</span>
+                            <span 
+                              onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                              onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                            >
+                              {b?.name || '?'}
+                            </span>
                           </div>
                           <span style={{ color: 'var(--color-enemy)', fontWeight: 'bold' }}>{r.avg.toFixed(1)}</span>
                         </div>
@@ -750,21 +769,92 @@ export default function BrawlerProfile({ brawlerId: propBrawlerId, matches = [],
             {/* Recent match history */}
             <div className="dashboard-section glass-panel">
               <h3>📋 Recent Matches</h3>
-              <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {myMatches.slice(0, 8).map(m => {
+              <p style={{ fontSize: '11px', color: 'var(--color-text-muted)', margin: '4px 0 12px' }}>
+                Your last matches with {brawler?.name}
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                {myMatches.slice(0, 10).map(m => {
                   const mapName = getMap(m.map_id)?.name || 'Unknown';
                   const isWin = m.result === 'victory';
+                  const isRanked = m.draft_type === 'ranked';
                   return (
-                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', borderRadius: '6px', background: 'rgba(255,255,255,0.03)', border: `1px solid ${isWin ? 'rgba(0,229,255,0.2)' : 'rgba(255,64,129,0.2)'}` }}>
-                      <span style={{ fontSize: '10px', fontWeight: 'bold', padding: '2px 6px', borderRadius: '4px', background: isWin ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,127,0.15)', color: isWin ? 'var(--color-ally)' : 'var(--color-enemy)' }}>
+                    <div key={m.id} className="mp-match-row" style={{
+                      borderLeft: `3px solid ${isWin ? 'var(--color-ally)' : 'var(--color-enemy)'}`,
+                      background: isWin ? 'rgba(0,229,255,0.03)' : 'rgba(255,0,85,0.03)',
+                    }}>
+                      {/* Win/Loss badge */}
+                      <span className="mp-match-result-badge" style={{
+                        background: isWin ? 'rgba(0,229,255,0.15)' : 'rgba(255,0,85,0.15)',
+                        color: isWin ? 'var(--color-ally)' : 'var(--color-enemy)',
+                      }}>
                         {isWin ? 'WIN' : 'LOSS'}
                       </span>
-                      <span style={{ fontSize: '11px', flex: 1 }}>{mapName}</span>
-                      <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', textTransform: 'capitalize' }}>{m.draft_type}</span>
-                      {m.is_star_player && <span title="Star Player">👑</span>}
+
+                      {/* Game mode icon as avatar */}
+                      <div className="mp-match-brawler-avatar-ph" style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1.5px solid rgba(255,255,255,0.1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px'
+                      }}>
+                        {getModeIcon(m.mode)}
+                      </div>
+
+                      {/* Name + draft type */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div 
+                          onClick={() => onMapClick && onMapClick(m.map_id)}
+                          onMouseEnter={e => { if (onMapClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                          onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                          style={{ fontSize: '12px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: onMapClick ? 'pointer' : 'default', color: '#fff' }}
+                        >
+                          {mapName}
+                        </div>
+                        <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', display: 'flex', gap: '5px', alignItems: 'center' }}>
+                          <span 
+                            onClick={() => onModeClick && onModeClick(m.mode)}
+                            onMouseEnter={e => { if (onModeClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                            onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                            style={{ cursor: onModeClick ? 'pointer' : 'default', color: '#00e5ff' }}
+                          >
+                            {m.mode}
+                          </span>
+                          <span>•</span>
+                          <span style={{
+                            padding: '1px 5px', borderRadius: '4px', fontSize: '9px', fontWeight: 700,
+                            background: isRanked ? 'rgba(168,85,247,0.15)' : 'rgba(255,255,255,0.06)',
+                            color: isRanked ? '#c084fc' : 'var(--color-text-muted)',
+                          }}>
+                            {isRanked ? '🏅 Ranked' : '🎮 Normal'}
+                          </span>
+                          {isRanked ? (
+                            m.my_brawler_trophies && (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                                {getRankIconUrl(m.my_brawler_trophies) && (
+                                  <img src={getRankIconUrl(m.my_brawler_trophies)} alt="" style={{ width: 12, height: 12 }} />
+                                )}
+                                {getRankById(m.my_brawler_trophies)?.name || m.my_brawler_trophies}
+                              </span>
+                            )
+                          ) : (
+                            m.my_brawler_trophies > 0 && (
+                              <span>🏆 {m.my_brawler_trophies}</span>
+                            )
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Right side: time + star */}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px', flexShrink: 0 }}>
+                        {m.is_star_player && <span title="Star Player" style={{ fontSize: '12px' }}>👑</span>}
+                        <span style={{ fontSize: '9px', color: 'var(--color-text-muted)' }}>{timeAgo(m.date)}</span>
+                      </div>
                     </div>
                   );
                 })}
+                {myMatches.length === 0 && <div className="empty-msg">No recent matches with this brawler.</div>}
               </div>
             </div>
 

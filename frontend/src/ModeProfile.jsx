@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useFilters } from './context/FilterContext';
 import { filterByTimeRange, filterByLevel } from './utils/matchFilters';
-import MatchFilterBar from './components/MatchFilterBar';
 
 const MODE_ICONS = {
   bounty: '⭐',
@@ -262,37 +261,6 @@ export default function ModeProfile({ mode: propMode, matches = [], brawlers = [
         <button className="btn btn-secondary" onClick={onBack}>◀ Back</button>
       </div>
 
-      <div className="glass-panel" style={{ padding: '10px 16px', marginTop: '12px' }}>
-        <div className="filter-group-row" style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
-          <div className="filter-control" style={{ flex: '1 1 160px' }}>
-            <label>Draft Type</label>
-            <select value={selectedDraftType} onChange={(e) => setSelectedDraftType(e.target.value)}>
-              <option value="All">🏆 All Formats</option>
-              <option value="Ranked">Competitive (Ranked)</option>
-              <option value="Normal">Normal (No Bans)</option>
-            </select>
-          </div>
-          <div className="filter-control" style={{ flex: '1 1 160px' }}>
-            <label>Brawler Class</label>
-            <select value={selectedClass} onChange={(e) => setSelectedClass(e.target.value)}>
-              {brawlerClasses.map(cls => (
-                <option key={cls} value={cls}>{cls === 'All' ? '⚡ All Classes' : cls}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-        <MatchFilterBar
-          timeRange={timeRange}
-          onTimeRangeChange={setTimeRange}
-          draftType={selectedDraftType}
-          levelMin={levelMin}
-          levelMax={levelMax}
-          onLevelChange={({ levelMin: lm, levelMax: lx }) => { setLevelMin(lm); setLevelMax(lx); }}
-          selectedTiers={selectedTiers}
-          onTiersChange={setSelectedTiers}
-          minNormalTrophies={minNormalTrophies}
-        />
-      </div>
 
       {total === 0 ? (
         <div className="glass-panel" style={{ textAlign: 'center', padding: '40px', marginTop: '20px', color: 'var(--color-text-muted)' }}>
@@ -373,8 +341,25 @@ export default function ModeProfile({ mode: propMode, matches = [], brawlers = [
                       }}
                     >
                       <div>
-                        <strong style={{ fontSize: '12px', color: '#fff' }}>{combo.brawlerName}</strong>
-                        <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginLeft: '6px' }}>on {combo.mapName}</span>
+                        <strong 
+                          style={{ fontSize: '12px', color: '#fff', cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                          onClick={() => onBrawlerClick && onBrawlerClick(combo.brawlerId)}
+                          onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                          onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                        >
+                          {combo.brawlerName}
+                        </strong>
+                        <span style={{ fontSize: '10px', color: 'var(--color-text-muted)', marginLeft: '6px' }}>
+                          on{' '}
+                          <span
+                            onClick={() => onMapClick && onMapClick(combo.mapId)}
+                            onMouseEnter={e => { if (onMapClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                            onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                            style={{ cursor: onMapClick ? 'pointer' : 'default', color: '#00e5ff' }}
+                          >
+                            {combo.mapName}
+                          </span>
+                        </span>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <span style={{ fontSize: '12px', fontWeight: '800', color: combo.winRate >= 50 ? 'var(--color-ally)' : 'var(--color-enemy)' }}>

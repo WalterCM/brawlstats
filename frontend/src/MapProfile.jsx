@@ -597,9 +597,19 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
                     {topPicks.allied.map(d => {
                       const b = brawlers.find(br => String(br.id) === String(d.brawler_id));
                       return (
-                        <div key={`ap-${d.brawler_id}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+                        <div 
+                          key={`ap-${d.brawler_id}`} 
+                          style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px', cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                          onClick={() => onBrawlerClick && onBrawlerClick(d.brawler_id)}
+                        >
                           {b?.image_url && <img src={b.image_url} alt={b?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', border: '1.5px solid var(--color-ally)' }} />}
-                          <span style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b?.name || '?'}</span>
+                          <span 
+                            onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                            onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                            style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {b?.name || '?'}
+                          </span>
                           <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
                             <div style={{ width: `${(d.count / maxPickCount) * 100}%`, height: '100%', borderRadius: '3px', background: 'var(--color-ally)' }} />
                           </div>
@@ -616,9 +626,19 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
                     {topPicks.enemy.map(d => {
                       const b = brawlers.find(br => String(br.id) === String(d.brawler_id));
                       return (
-                        <div key={`ep-${d.brawler_id}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+                        <div 
+                          key={`ep-${d.brawler_id}`} 
+                          style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px', cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                          onClick={() => onBrawlerClick && onBrawlerClick(d.brawler_id)}
+                        >
                           {b?.image_url && <img src={b.image_url} alt={b?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', border: '1.5px solid var(--color-enemy)' }} />}
-                          <span style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b?.name || '?'}</span>
+                          <span 
+                            onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                            onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                            style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {b?.name || '?'}
+                          </span>
                           <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
                             <div style={{ width: `${(d.count / maxPickCount) * 100}%`, height: '100%', borderRadius: '3px', background: 'var(--color-enemy)' }} />
                           </div>
@@ -635,9 +655,19 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
                     {topPicks.bans.map(d => {
                       const b = brawlers.find(br => String(br.id) === String(d.brawler_id));
                       return (
-                        <div key={`bn-${d.brawler_id}-${d.team}`} style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px' }}>
+                        <div 
+                          key={`bn-${d.brawler_id}-${d.team}`} 
+                          style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '6px', cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                          onClick={() => onBrawlerClick && onBrawlerClick(d.brawler_id)}
+                        >
                           {b?.image_url && <img src={b.image_url} alt={b?.name} style={{ width: '20px', height: '20px', borderRadius: '50%', border: '1.5px solid #ffb703', filter: 'grayscale(0.4)' }} />}
-                          <span style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b?.name || '?'}</span>
+                          <span 
+                            onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                            onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                            style={{ fontSize: '11px', width: '70px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                          >
+                            {b?.name || '?'}
+                          </span>
                           <div style={{ flex: 1, height: '5px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)' }}>
                             <div style={{ width: `${(d.count / maxPickCount) * 100}%`, height: '100%', borderRadius: '3px', background: '#ffb703' }} />
                           </div>
@@ -678,13 +708,28 @@ export default function MapProfile({ mapId: propMapId, matches = [], brawlers = 
 
                       {/* Brawler avatar */}
                       {bAvatar
-                        ? <img src={bAvatar} alt={bName} className="mp-match-brawler-avatar" />
-                        : <div className="mp-match-brawler-avatar-ph">👤</div>
+                        ? <img 
+                            src={bAvatar} 
+                            alt={bName} 
+                            className="mp-match-brawler-avatar" 
+                            style={{ cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                            onClick={() => onBrawlerClick && onBrawlerClick(m.my_brawler_id)}
+                          />
+                        : <div 
+                            className="mp-match-brawler-avatar-ph"
+                            style={{ cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                            onClick={() => onBrawlerClick && onBrawlerClick(m.my_brawler_id)}
+                          >👤</div>
                       }
 
                       {/* Name + draft type */}
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: '12px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div 
+                          onClick={() => onBrawlerClick && onBrawlerClick(m.my_brawler_id)}
+                          onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                          onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                          style={{ fontSize: '12px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: onBrawlerClick ? 'pointer' : 'default', color: '#fff' }}
+                        >
                           {bName}
                         </div>
                         <div style={{ fontSize: '10px', color: 'var(--color-text-muted)', display: 'flex', gap: '5px', alignItems: 'center' }}>

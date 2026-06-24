@@ -1346,17 +1346,53 @@ function App() {
                   {displayedMatches.slice(0, 5).map((m) => (
                     <div key={m.id} style={{ display: 'flex', flexDirection: 'column', marginBottom: '6px' }}>
                       <div className={`match-item ${m.result === 'victory' ? 'win' : 'loss'}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 8px', fontSize: '11px', borderRadius: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-glass)' }}>
-                        {<MatchTeamsBanner match={m} brawlers={brawlers} />}
+                        <MatchTeamsBanner 
+                          match={m} 
+                          brawlers={brawlers} 
+                          onBrawlerClick={(brawlerId) => {
+                            setSelectedProfileBrawlerId(brawlerId);
+                            navigate(`/stats/brawler/${brawlerId}`);
+                          }}
+                        />
                         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <span className="map-name" style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text)' }}>
+                            <span 
+                              className="map-name" 
+                              onClick={() => {
+                                setSelectedMapId(m.map_id);
+                                navigate(`/stats/map/${m.map_id}`);
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                              onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                              style={{ fontWeight: '600', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--color-text)', cursor: 'pointer' }}
+                            >
                               {getMapName(allMaps, m.map_id)}
                             </span>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '10px', color: 'var(--color-text-muted)' }}>
-                            <span style={{ textTransform: 'capitalize' }}>{getModeIcon(m.mode)} {m.mode}</span>
+                            <span 
+                              onClick={() => {
+                                setSelectedMode(m.mode);
+                                navigate(`/stats/mode/${m.mode}`);
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                              onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                              style={{ textTransform: 'capitalize', cursor: 'pointer' }}
+                            >
+                              {getModeIcon(m.mode)} {m.mode}
+                            </span>
                             <span>•</span>
-                            <span>{getBrawlerName(brawlers, m.my_brawler_id)}</span>
+                            <span 
+                              onClick={() => {
+                                setSelectedProfileBrawlerId(m.my_brawler_id);
+                                navigate(`/stats/brawler/${m.my_brawler_id}`);
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                              onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              {getBrawlerName(brawlers, m.my_brawler_id)}
+                            </span>
                             {m.my_brawler_trophies != null && (
                               <>
                                 <span>•</span>
@@ -2063,6 +2099,18 @@ function App() {
           brawlerMeta={brawlerMeta}
           minNormalTrophies={minNormalTrophies}
           onBack={() => navigate(-1)}
+          onBrawlerClick={(brawlerId) => {
+            setSelectedProfileBrawlerId(brawlerId);
+            navigate(`/stats/brawler/${brawlerId}`);
+          }}
+          onMapClick={(mapId) => {
+            setSelectedMapId(mapId);
+            navigate(`/stats/map/${mapId}`);
+          }}
+          onModeClick={(mode) => {
+            setSelectedMode(mode);
+            navigate(`/stats/mode/${mode}`);
+          }}
         />
         } />
         <Route path="/stats/map/:mapId" element={
@@ -2138,6 +2186,18 @@ function App() {
               handleSyncHistory={handleSyncHistory}
               syncingHistory={syncingHistory}
               onMatchesChange={setMatches}
+              onBrawlerClick={(brawlerId) => {
+                setSelectedProfileBrawlerId(brawlerId);
+                navigate(`/stats/brawler/${brawlerId}`);
+              }}
+              onMapClick={(mapId) => {
+                setSelectedMapId(mapId);
+                navigate(`/stats/map/${mapId}`);
+              }}
+              onModeClick={(mode) => {
+                setSelectedMode(mode);
+                navigate(`/stats/mode/${mode}`);
+              }}
             />
           </div>
         } />

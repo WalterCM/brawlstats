@@ -10,7 +10,10 @@ export default function BattleLog({
   isOwnProfile = true,
   handleSyncHistory,
   syncingHistory,
-  onMatchesChange
+  onMatchesChange,
+  onBrawlerClick,
+  onMapClick,
+  onModeClick
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [ratingMatchId, setRatingMatchId] = useState(null);
@@ -156,16 +159,20 @@ export default function BattleLog({
 
                 {/* Left Column: Player's Brawler Avatar & Name */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: '200px', position: 'relative', zIndex: 2 }}>
-                  <div style={{ 
-                    position: 'relative', 
-                    width: '68px', 
-                    height: '68px', 
-                    borderRadius: '16px', 
-                    border: isWin ? '3px solid #00e5ff' : '3px solid #ff007f',
-                    boxShadow: isWin ? '0 0 12px rgba(0, 229, 255, 0.6)' : '0 0 12px rgba(255, 0, 79, 0.6)',
-                    overflow: 'hidden',
-                    flexShrink: 0
-                  }}>
+                  <div 
+                    onClick={() => onBrawlerClick && onBrawlerClick(m.my_brawler_id)}
+                    style={{ 
+                      position: 'relative', 
+                      width: '68px', 
+                      height: '68px', 
+                      borderRadius: '16px', 
+                      border: isWin ? '3px solid #00e5ff' : '3px solid #ff007f',
+                      boxShadow: isWin ? '0 0 12px rgba(0, 229, 255, 0.6)' : '0 0 12px rgba(255, 0, 79, 0.6)',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      cursor: onBrawlerClick ? 'pointer' : 'default'
+                    }}
+                  >
                     {myBrawlerAvatar ? (
                       <img src={myBrawlerAvatar} alt={myBrawlerName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
@@ -173,7 +180,12 @@ export default function BattleLog({
                     )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <span style={{ fontWeight: '900', fontSize: '16px', color: '#fff', letterSpacing: '0.4px' }}>
+                    <span 
+                      onClick={() => onBrawlerClick && onBrawlerClick(m.my_brawler_id)}
+                      onMouseEnter={e => { if (onBrawlerClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                      onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                      style={{ fontWeight: '900', fontSize: '16px', color: '#fff', letterSpacing: '0.4px', cursor: onBrawlerClick ? 'pointer' : 'default' }}
+                    >
                       {myBrawlerName}
                     </span>
                     {m.my_brawler_trophies != null && (
@@ -197,11 +209,22 @@ export default function BattleLog({
 
                 {/* Center Column: Map & Game Mode Info */}
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative', zIndex: 2 }}>
-                  <span className="map-name" style={{ fontWeight: '900', fontSize: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#fff', letterSpacing: '0.5px' }}>
+                  <span 
+                    className="map-name" 
+                    onClick={() => onMapClick && onMapClick(m.map_id)}
+                    onMouseEnter={e => { if (onMapClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                    onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                    style={{ fontWeight: '900', fontSize: '20px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#fff', letterSpacing: '0.5px', cursor: onMapClick ? 'pointer' : 'default' }}
+                  >
                     {getMapName(allMaps, m.map_id)}
                   </span>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'rgba(255, 255, 255, 0.8)', fontWeight: '600' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px', textTransform: 'capitalize' }}>
+                    <span 
+                      onClick={() => onModeClick && onModeClick(m.mode)}
+                      onMouseEnter={e => { if (onModeClick) e.currentTarget.style.textDecoration = 'underline'; }}
+                      onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '4px', textTransform: 'capitalize', cursor: onModeClick ? 'pointer' : 'default' }}
+                    >
                       <span style={{ fontSize: '15px' }}>{getModeIcon(m.mode)}</span> {m.mode}
                     </span>
                     <span>•</span>
@@ -222,7 +245,7 @@ export default function BattleLog({
                 {/* Right Column: 3v3 Compositions & Action Buttons */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '20px', position: 'relative', zIndex: 2 }}>
                   <div style={{ background: 'rgba(0, 0, 0, 0.25)', padding: '12px 18px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                    <MatchTeamsBanner match={m} brawlers={brawlers} vertical={true} />
+                    <MatchTeamsBanner match={m} brawlers={brawlers} vertical={true} onBrawlerClick={onBrawlerClick} />
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', minWidth: '100px' }}>

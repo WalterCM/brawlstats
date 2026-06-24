@@ -862,7 +862,23 @@ export default function ClubDashboard({
                                   </div>
                                 ) : '-'}
                               </td>
-                              <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{member.top_brawler || '-'}</td>
+                              <td style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
+                                {member.top_brawler ? (
+                                  (() => {
+                                    const topBrawlerObj = brawlers.find(br => br.name.toLowerCase() === member.top_brawler.toLowerCase());
+                                    return (
+                                      <span 
+                                        onClick={topBrawlerObj ? () => navigate(`/stats/brawler/${topBrawlerObj.id}`) : undefined}
+                                        onMouseEnter={e => { if (topBrawlerObj) e.currentTarget.style.textDecoration = 'underline'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; }}
+                                        style={{ cursor: topBrawlerObj ? 'pointer' : 'default' }}
+                                      >
+                                        {member.top_brawler}
+                                      </span>
+                                    );
+                                  })()
+                                ) : '-'}
+                              </td>
                             </tr>
                           ))}
                           {clubStats.leaderboard.filter(m => m.played > 0).length === 0 && (
@@ -884,7 +900,7 @@ export default function ClubDashboard({
                             {topPerformanceBrawlers.slice(0, 8).map(b => {
                               const avatarUrl = getBrawlerAvatar(brawlers, b.id);
                               return (
-                                <div key={b.id} className="brawler-popularity-card">
+                                <div key={b.id} className="brawler-popularity-card" style={{ cursor: 'pointer' }} onClick={() => navigate(`/stats/brawler/${b.id}`)}>
                                   {avatarUrl ? (
                                     <img src={avatarUrl} alt={b.name} className="brawler-card-avatar" />
                                   ) : (
@@ -909,7 +925,7 @@ export default function ClubDashboard({
                               const avatarUrl = getBrawlerAvatar(brawlers, b.id);
                               const popRate = b.popularity_rate != null ? b.popularity_rate : 0;
                               return (
-                                <div key={b.id} className="brawler-popularity-card">
+                                <div key={b.id} className="brawler-popularity-card" style={{ cursor: 'pointer' }} onClick={() => navigate(`/stats/brawler/${b.id}`)}>
                                   {avatarUrl ? (
                                     <img src={avatarUrl} alt={b.name} className="brawler-card-avatar" />
                                   ) : (
@@ -935,8 +951,9 @@ export default function ClubDashboard({
                         <div className="brawlers-popularity-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: '10px' }}>
                           {memberTopBrawlers.slice(0, 8).map(b => {
                             const avatarUrl = getAvatarByName(b.name);
+                            const brawlerObj = brawlers.find(br => br.name.toLowerCase() === b.name.toLowerCase());
                             return (
-                              <div key={b.name} className="brawler-popularity-card">
+                              <div key={b.name} className="brawler-popularity-card" style={{ cursor: brawlerObj ? 'pointer' : 'default' }} onClick={brawlerObj ? () => navigate(`/stats/brawler/${brawlerObj.id}`) : undefined}>
                                 {avatarUrl ? (
                                   <img src={avatarUrl} alt={b.name} className="brawler-card-avatar" />
                                 ) : (
@@ -960,8 +977,8 @@ export default function ClubDashboard({
                         <h3 style={{ marginBottom: '15px', fontSize: '1.1rem' }}>🎮 Most Played Modes</h3>
                         <div className="compact-list">
                           {clubStats.modes.slice(0, 5).map(m => (
-                            <div key={m.mode} className="compact-list-item">
-                              <span className="compact-list-name">{m.mode}</span>
+                            <div key={m.mode} className="compact-list-item" style={{ cursor: 'pointer' }} onClick={() => navigate(`/stats/mode/${m.mode}`)}>
+                              <span className="compact-list-name" onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'} onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}>{m.mode}</span>
                               <span className="compact-list-stat">{m.played} games</span>
                               <span className={`compact-list-wr ${m.win_rate >= 55 ? 'wr-high' : m.win_rate >= 50 ? 'wr-mid' : 'wr-low'}`}>
                                 {m.win_rate.toFixed(1)}%

@@ -1,15 +1,18 @@
 import React from 'react';
 import { getBrawlerAvatar, getBrawlerName } from '../utils/helpers';
 
-const BrawlerAvatar = ({ brawlerId, brawlers, borderColor, boxShadow, label, size = '24px' }) => {
+const BrawlerAvatar = ({ brawlerId, brawlers, borderColor, boxShadow, label, size = '24px', onBrawlerClick }) => {
   const avatarUrl = getBrawlerAvatar(brawlers, brawlerId);
   const bName = getBrawlerName(brawlers, brawlerId);
   return (
-    <div style={{
-      position: 'relative', width: size, height: size, borderRadius: '50%',
-      border: borderColor, overflow: 'hidden', flexShrink: 0,
-      boxShadow: boxShadow || 'none'
-    }} title={`${bName}${label ? ` (${label})` : ''}`}>
+    <div 
+      onClick={() => onBrawlerClick && onBrawlerClick(brawlerId)}
+      style={{
+        position: 'relative', width: size, height: size, borderRadius: '50%',
+        border: borderColor, overflow: 'hidden', flexShrink: 0,
+        boxShadow: boxShadow || 'none',
+        cursor: onBrawlerClick ? 'pointer' : 'default'
+      }} title={`${bName}${label ? ` (${label})` : ''}`}>
       {avatarUrl ? (
         <img src={avatarUrl} alt={bName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
@@ -19,7 +22,7 @@ const BrawlerAvatar = ({ brawlerId, brawlers, borderColor, boxShadow, label, siz
   );
 };
 
-const MatchTeamsBanner = ({ match, brawlers, vertical = false }) => {
+const MatchTeamsBanner = ({ match, brawlers, vertical = false, onBrawlerClick }) => {
   const picks = match.draft_events || [];
   const alliedPicks = picks
     .filter(e => e.type === 'pick' && e.team === 'allied')
@@ -60,6 +63,7 @@ const MatchTeamsBanner = ({ match, brawlers, vertical = false }) => {
             boxShadow={idx === firstAllyMatchIdx ? '0 0 6px #ffd166' : 'none'}
             label={idx === firstAllyMatchIdx ? 'You' : undefined}
             size={avatarSize}
+            onBrawlerClick={onBrawlerClick}
           />
         ))}
       </div>
@@ -84,6 +88,7 @@ const MatchTeamsBanner = ({ match, brawlers, vertical = false }) => {
             brawlers={brawlers}
             borderColor="1.5px solid var(--color-enemy)"
             size={avatarSize}
+            onBrawlerClick={onBrawlerClick}
           />
         ))}
       </div>
