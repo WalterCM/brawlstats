@@ -1204,6 +1204,12 @@ function App() {
             💬 Forum
           </button>
           <button 
+            className={`nav-link ${location.pathname === '/club/link' ? 'active' : ''}`}
+            onClick={() => navigate('/club/link')}
+          >
+            🔗 Vincular Cuenta
+          </button>
+          <button 
             className={`nav-link ${location.pathname === '/battle-log' ? 'active' : ''}`}
             onClick={() => navigate('/battle-log')}
           >
@@ -2086,6 +2092,23 @@ function App() {
             minNormalTrophies={minNormalTrophies}
             enterDraftMode={enterDraftMode}
             view="forum"
+          />
+        } />
+        <Route path="/club/link" element={
+          <ClubDashboard 
+            me={me} 
+            setMe={setMe} 
+            brawlers={brawlers}
+            allMaps={allMaps}
+            brawlerMeta={brawlerMeta}
+            matches={matches}
+            setMatches={setMatches}
+            perceptions={perceptions}
+            handleSyncHistory={handleSyncHistory}
+            syncingHistory={syncingHistory}
+            minNormalTrophies={minNormalTrophies}
+            enterDraftMode={enterDraftMode}
+            view="link"
           />
         } />
         <Route path="/stats" element={<Navigate to="/" replace />} />

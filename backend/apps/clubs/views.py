@@ -4,10 +4,11 @@ from django.db import transaction
 
 from apps.core.permissions import IsSupabaseAuthenticated
 from apps.core.models import Player
-from apps.clubs.models import Club, ClubMember, ForumCategory, ForumThread, ForumReply
+from apps.clubs.models import Club, ClubMember, ForumCategory, ForumThread, ForumReply, LinkRequest, ClubConfig
 from apps.clubs.serializers import (
     ClubSerializer, ClubMemberSerializer, 
-    ForumCategorySerializer, ForumThreadSerializer, ForumReplySerializer
+    ForumCategorySerializer, ForumThreadSerializer, ForumReplySerializer,
+    LinkRequestSerializer, ClubConfigSerializer
 )
 
 class IsApprovedClubMember(permissions.BasePermission):
@@ -153,6 +154,61 @@ class ClubViewSet(viewsets.ModelViewSet):
             membership = player.club_membership
             club = membership.club
             if membership.is_approved and membership.is_active:
+                # Annotate active members with senior scoring for roster display
+                from django.utils import timezone
+                from django.db.models import Count, Q
+                from apps.matches.models import Match
+
+                active_qs = club.members.filter(is_approved=True, is_active=True)
+                active_members = list(active_qs)
+                club_config, _ = ClubConfig.objects.get_or_create(club=club)
+
+                player_ids = [m.player_id for m in active_members]
+                member_stats = Match.objects.filter(
+                    player_id__in=player_ids
+                ).values('player_id').annotate(
+                    played=Count('id'),
+                    ranked_played=Count('id', filter=Q(draft_type='ranked')),
+                )
+                stats_by_player = {s['player_id']: s for s in member_stats}
+
+                for m in active_members:
+                    m._days_in_club = (timezone.now() - m.joined_at).days if m.joined_at else 0
+
+                max_days = max((m._days_in_club for m in active_members), default=1)
+                max_ranked = max((stats_by_player.get(m.player_id, {}).get('ranked_played', 0) or 0 for m in active_members), default=1)
+                max_total = max((stats_by_player.get(m.player_id, {}).get('played', 0) or 0 for m in active_members), default=1)
+
+                w_days = club_config.weight_days
+                w_ranked = club_config.weight_ranked
+                w_total = club_config.weight_total
+
+                scored = []
+                for m in active_members:
+                    s = stats_by_player.get(m.player_id, {})
+                    played = s.get('played', 0) or 0
+                    ranked_played = s.get('ranked_played', 0) or 0
+                    norm_days = m._days_in_club / max_days if max_days > 0 else 0
+                    norm_ranked = ranked_played / max_ranked if max_ranked > 0 else 0
+                    norm_total = played / max_total if max_total > 0 else 0
+                    senior_score = round(norm_days * w_days + norm_ranked * w_ranked + norm_total * w_total, 4)
+                    m._senior_score = senior_score
+                    m._is_senior_candidate = False
+                    scored.append((senior_score, m.role, m))
+
+                # Determine candidates
+                max_senior_pct = club_config.max_senior_pct
+                already_senior_count = sum(1 for _, role, _ in scored if role in ('senior', 'president', 'vice_president'))
+                max_seniors = max(1, round(len(active_members) * max_senior_pct / 100))
+                available_slots = max(0, max_seniors - already_senior_count)
+
+                scored.sort(key=lambda x: x[0], reverse=True)
+                candidate_count = 0
+                for _, role, m in scored:
+                    if role not in ('senior', 'president', 'vice_president') and candidate_count < available_slots:
+                        m._is_senior_candidate = True
+                        candidate_count += 1
+
                 serializer = self.get_serializer(club)
                 return response.Response({
                     'in_club': True,
@@ -476,6 +532,8 @@ class ClubViewSet(viewsets.ModelViewSet):
                     total_matches += count
             except Exception as e:
                 errors.append({'player_id': p.id, 'name': p.name, 'error': str(e)})
+            import time
+            time.sleep(1.5)
 
         return response.Response({
             'synced_players': synced_players,
@@ -600,6 +658,208 @@ class ClubViewSet(viewsets.ModelViewSet):
             'unlinked_users': unlinked_users,
             'unlinked_players': unlinked_players
         })
+
+    @action(detail=True, methods=['get'])
+    def public_members(self, request, pk=None):
+        club = self.get_object()
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return response.Response({'error': 'Authentication required.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        club_config, _ = ClubConfig.objects.get_or_create(club=club)
+        linkable_roles = club_config.linkable_roles or []
+
+        members_qs = ClubMember.objects.filter(
+            club=club, is_active=True, is_approved=True
+        ).select_related('player')
+
+        result = []
+        for m in members_qs:
+            p = m.player
+            is_linked = bool(p.supabase_auth_id and p.supabase_auth_id.startswith('django-user-'))
+            is_linkable = m.role in linkable_roles and not is_linked
+            result.append({
+                'player_id': p.id,
+                'name': p.name,
+                'tag': p.player_tag,
+                'avatar_id': p.avatar_id,
+                'role': m.role,
+                'is_linked': is_linked,
+                'is_linkable': is_linkable,
+            })
+
+        return response.Response(result)
+
+    @action(detail=True, methods=['post'])
+    def request_link(self, request, pk=None):
+        club = self.get_object()
+        player_to_link_id = request.data.get('player_id')
+        if not player_to_link_id:
+            return response.Response({'error': 'player_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        target_player = Player.objects.filter(id=player_to_link_id).first()
+        if not target_player:
+            return response.Response({'error': 'Player not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Must be a member of this club
+        membership = ClubMember.objects.filter(club=club, player=target_player, is_active=True).first()
+        if not membership:
+            return response.Response({'error': 'Player is not a member of this club.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Check if the club allows linking for this role
+        club_config, _ = ClubConfig.objects.get_or_create(club=club)
+        linkable_roles = club_config.linkable_roles or []
+        if membership.role not in linkable_roles:
+            return response.Response({'error': f'Club does not allow linking for {membership.role} role.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # Must not already be linked
+        if target_player.supabase_auth_id and target_player.supabase_auth_id.startswith('django-user-'):
+            return response.Response({'error': 'Player is already linked to an account.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = getattr(request, 'user', None)
+        if not user or not user.is_authenticated:
+            return response.Response({'error': 'You must be logged in.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Check if already requested
+        existing = LinkRequest.objects.filter(
+            player=target_player, user=user, club=club, status='pending'
+        ).first()
+        if existing:
+            return response.Response({'error': 'You already have a pending link request for this player.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        link_req = LinkRequest.objects.create(
+            player=target_player, user=user, club=club, status='pending'
+        )
+        serializer = LinkRequestSerializer(link_req)
+        return response.Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'])
+    def pending_link_requests(self, request, pk=None):
+        club = self.get_object()
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+
+        try:
+            req_membership = ClubMember.objects.get(club=club, player=request.player)
+            is_allowed = is_site_admin or req_membership.role in ['president', 'vice_president']
+        except ClubMember.DoesNotExist:
+            is_allowed = is_site_admin
+
+        if not is_allowed:
+            return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        requests_qs = LinkRequest.objects.filter(club=club, status='pending').order_by('-created_at')
+        serializer = LinkRequestSerializer(requests_qs, many=True)
+        return response.Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='approve_link_request/(?P<request_id>[^/.]+)')
+    def approve_link_request(self, request, pk=None, request_id=None):
+        club = self.get_object()
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+
+        try:
+            req_membership = ClubMember.objects.get(club=club, player=request.player)
+            is_allowed = is_site_admin or req_membership.role in ['president', 'vice_president']
+        except ClubMember.DoesNotExist:
+            is_allowed = is_site_admin
+
+        if not is_allowed:
+            return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        link_req = LinkRequest.objects.filter(id=request_id, club=club, status='pending').first()
+        if not link_req:
+            return response.Response({'error': 'Link request not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Reuse the existing link_player logic
+        from django.contrib.auth.models import User
+        from django.utils import timezone
+
+        target_user = link_req.user
+        target_player = link_req.player
+
+        with transaction.atomic():
+            old_auth_id = f"django-user-{target_user.id}"
+            temp_players = Player.objects.filter(supabase_auth_id=old_auth_id)
+            for tp in temp_players:
+                if tp.id != target_player.id:
+                    ForumThread.objects.filter(author=tp).update(author=target_player)
+                    ForumReply.objects.filter(author=tp).update(author=target_player)
+                    tp.delete()
+
+            target_player.supabase_auth_id = old_auth_id
+            target_player.save()
+
+            membership, created = ClubMember.objects.get_or_create(
+                club=club,
+                player=target_player,
+                defaults={
+                    'role': 'member',
+                    'is_approved': True,
+                    'is_active': True,
+                    'joined_at': timezone.now()
+                }
+            )
+            if not created:
+                membership.is_approved = True
+                membership.is_active = True
+                membership.save()
+
+        link_req.status = 'approved'
+        link_req.save()
+
+        return response.Response({'message': f'Link request approved. {target_player.name} linked to {target_user.username}.'})
+
+    @action(detail=True, methods=['post'], url_path='reject_link_request/(?P<request_id>[^/.]+)')
+    def reject_link_request(self, request, pk=None, request_id=None):
+        club = self.get_object()
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+
+        try:
+            req_membership = ClubMember.objects.get(club=club, player=request.player)
+            is_allowed = is_site_admin or req_membership.role in ['president', 'vice_president']
+        except ClubMember.DoesNotExist:
+            is_allowed = is_site_admin
+
+        if not is_allowed:
+            return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        link_req = LinkRequest.objects.filter(id=request_id, club=club, status='pending').first()
+        if not link_req:
+            return response.Response({'error': 'Link request not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        link_req.status = 'rejected'
+        link_req.save()
+        return response.Response({'message': 'Link request rejected.'})
+
+    @action(detail=True, methods=['get', 'put'])
+    def config(self, request, pk=None):
+        club = self.get_object()
+        user = getattr(request, 'user', None)
+        is_site_admin = user and (user.is_staff or user.is_superuser)
+
+        try:
+            req_membership = ClubMember.objects.get(club=club, player=request.player)
+            is_allowed = is_site_admin or req_membership.role in ['president', 'vice_president']
+        except ClubMember.DoesNotExist:
+            is_allowed = is_site_admin
+
+        if not is_allowed:
+            return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
+
+        club_config, _ = ClubConfig.objects.get_or_create(club=club)
+
+        if request.method == 'GET':
+            serializer = ClubConfigSerializer(club_config)
+            return response.Response(serializer.data)
+
+        elif request.method == 'PUT':
+            serializer = ClubConfigSerializer(club_config, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return response.Response(serializer.data)
+            return response.Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=['get'])
     def stats(self, request, pk=None):
@@ -771,6 +1031,8 @@ class ClubViewSet(viewsets.ModelViewSet):
             recent_played = s.get('recent_played', 0) or 0
             recent_wins = s.get('recent_wins', 0) or 0
 
+            days_in_club = (timezone.now() - m_member.joined_at).days if m_member.joined_at else 0
+
             leaderboard.append({
                 'player_id': p.id,
                 'name': p.name,
@@ -794,7 +1056,43 @@ class ClubViewSet(viewsets.ModelViewSet):
                 'recent_wins': recent_wins,
                 'recent_win_rate': (recent_wins / recent_played * 100) if recent_played > 0 else 0,
                 'top_brawler': top_brawler_map.get(p.id, None),
+                'days_in_club': days_in_club,
             })
+
+        # Compute senior scoring
+        club_config, _ = ClubConfig.objects.get_or_create(club=club)
+        max_senior_pct = club_config.max_senior_pct
+        w_days = club_config.weight_days
+        w_ranked = club_config.weight_ranked
+        w_total = club_config.weight_total
+
+        max_days = max((m['days_in_club'] for m in leaderboard), default=1)
+        max_ranked = max((m['ranked_played'] for m in leaderboard), default=1)
+        max_total = max((m['played'] for m in leaderboard), default=1)
+
+        for m in leaderboard:
+            norm_days = m['days_in_club'] / max_days if max_days > 0 else 0
+            norm_ranked = m['ranked_played'] / max_ranked if max_ranked > 0 else 0
+            norm_total = m['played'] / max_total if max_total > 0 else 0
+            m['senior_score'] = round(
+                norm_days * w_days + norm_ranked * w_ranked + norm_total * w_total, 4
+            )
+
+        # Sort by senior_score descending to find candidates
+        scored = sorted(leaderboard, key=lambda x: x['senior_score'], reverse=True)
+        # Count how many are already senior/president/vp (they keep their role regardless)
+        already_senior_count = sum(1 for m in scored if m['role'] in ('senior', 'president', 'vice_president'))
+        max_seniors = max(1, round(len(leaderboard) * max_senior_pct / 100))
+        available_slots = max(0, max_seniors - already_senior_count)
+
+        # Mark candidates: non-senior members with highest senior_score filling available slots
+        candidate_count = 0
+        for m in scored:
+            if m['role'] not in ('senior', 'president', 'vice_president') and candidate_count < available_slots:
+                m['is_senior_candidate'] = True
+                candidate_count += 1
+            else:
+                m['is_senior_candidate'] = False
 
         sort_key_map = {
             'win_rate': lambda x: (x['win_rate'], x['played']),
@@ -805,6 +1103,7 @@ class ClubViewSet(viewsets.ModelViewSet):
             'ranked_win_rate': lambda x: (x['ranked_win_rate'], x['ranked_played']),
             'recent_win_rate': lambda x: (x['recent_win_rate'], x['recent_played']),
             'name': lambda x: (x['name'],),
+            'senior_score': lambda x: (x['senior_score'],),
         }
         key_fn = sort_key_map.get(sort_by, sort_key_map['win_rate'])
         leaderboard.sort(key=key_fn, reverse=True)
@@ -816,7 +1115,13 @@ class ClubViewSet(viewsets.ModelViewSet):
             'brawlers': brawlers_list,
             'maps': maps_list,
             'sort_by': sort_by,
-            'leaderboard': leaderboard
+            'leaderboard': leaderboard,
+            'senior_config': {
+                'max_senior_pct': max_senior_pct,
+                'max_seniors': max_seniors,
+                'current_seniors': already_senior_count,
+                'available_slots': available_slots,
+            }
         })
 
 def check_is_senior_or_above(player, user=None):

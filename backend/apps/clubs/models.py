@@ -30,6 +30,35 @@ class ClubMember(models.Model):
     def __str__(self):
         return f"{self.player.name} - {self.role} in {self.club.name}"
 
+class LinkRequest(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+    ]
+    player = models.ForeignKey(Player, on_delete=models.CASCADE, related_name='link_requests')
+    user = models.ForeignKey('auth.User', on_delete=models.CASCADE, related_name='club_link_requests')
+    club = models.ForeignKey(Club, on_delete=models.CASCADE, related_name='link_requests')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('player', 'user', 'club')
+
+    def __str__(self):
+        return f"Link {self.player.name} -> {self.user.username} in {self.club.name} [{self.status}]"
+
+class ClubConfig(models.Model):
+    club = models.OneToOneField(Club, on_delete=models.CASCADE, related_name='config')
+    max_senior_pct = models.FloatField(default=25.0, help_text="Max percentage of members that can be senior (0-100)")
+    weight_days = models.FloatField(default=1.0, help_text="Weight for days in club in senior score")
+    weight_ranked = models.FloatField(default=1.5, help_text="Weight for ranked games played in senior score")
+    weight_total = models.FloatField(default=0.5, help_text="Weight for total games played in senior score")
+    linkable_roles = models.JSONField(default=list, blank=True, help_text="Roles that can request link (e.g. ['senior', 'member'])")
+
+    def __str__(self):
+        return f"Config for {self.club.name}"
+
 class ForumCategory(models.Model):
     club = models.ForeignKey(Club, on_delete=models.CASCADE, related_name='categories', null=True, blank=True)
     name = models.CharField(max_length=100)

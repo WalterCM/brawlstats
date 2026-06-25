@@ -87,18 +87,34 @@ class MatchViewSet(viewsets.ModelViewSet):
                     my_brawler_trophies = set_item.get('my_brawler_trophies')
                     is_star_player = set_item.get('is_star_player', False)
 
-                    match = Match.objects.create(
-                        player=request.player,
-                        map=db_map,
-                        my_brawler=my_brawler,
-                        mode=mode or db_map.mode,
-                        result=result,
-                        draft_type=draft_type,
-                        api_match_id=api_match_id,
-                        series_api_match_id=series_id,
-                        my_brawler_trophies=my_brawler_trophies,
-                        is_star_player=is_star_player
-                    )
+                    if api_match_id:
+                        match, created = Match.objects.get_or_create(
+                            player=request.player,
+                            api_match_id=api_match_id,
+                            defaults=dict(
+                                map=db_map,
+                                my_brawler=my_brawler,
+                                mode=mode or db_map.mode,
+                                result=result,
+                                draft_type=draft_type,
+                                series_api_match_id=series_id,
+                                my_brawler_trophies=my_brawler_trophies,
+                                is_star_player=is_star_player,
+                            )
+                        )
+                    else:
+                        match = Match.objects.create(
+                            player=request.player,
+                            map=db_map,
+                            my_brawler=my_brawler,
+                            mode=mode or db_map.mode,
+                            result=result,
+                            draft_type=draft_type,
+                            api_match_id=api_match_id,
+                            series_api_match_id=series_id,
+                            my_brawler_trophies=my_brawler_trophies,
+                            is_star_player=is_star_player
+                        )
                     created_matches.append(match)
 
                     for event in draft_events_data:
@@ -505,17 +521,21 @@ class MatchViewSet(viewsets.ModelViewSet):
 
         synced_count = 0
         for b in to_import:
-            match = Match.objects.create(
+            match, created = Match.objects.get_or_create(
                 player=request.player,
-                map=b['map'],
-                my_brawler=b['my_brawler'],
-                mode=b['mode'],
-                result=b['result'],
-                draft_type=b['draft_type'],
                 api_match_id=b['battle_time'],
-                my_brawler_trophies=b['trophies'],
-                is_star_player=b['is_star_player'],
+                defaults=dict(
+                    map=b['map'],
+                    my_brawler=b['my_brawler'],
+                    mode=b['mode'],
+                    result=b['result'],
+                    draft_type=b['draft_type'],
+                    my_brawler_trophies=b['trophies'],
+                    is_star_player=b['is_star_player'],
+                )
             )
+            if not created:
+                continue
 
             order = 0
             for p in b['allied_team']:

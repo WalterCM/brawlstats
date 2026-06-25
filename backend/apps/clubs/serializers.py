@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from apps.core.models import Player
-from apps.clubs.models import Club, ClubMember, ForumCategory, ForumThread, ForumReply
+from apps.clubs.models import Club, ClubMember, ForumCategory, ForumThread, ForumReply, LinkRequest, ClubConfig
 
 class ClubMemberSerializer(serializers.ModelSerializer):
     player_name = serializers.CharField(source='player.name', read_only=True)
@@ -8,19 +8,32 @@ class ClubMemberSerializer(serializers.ModelSerializer):
     avatar_id = serializers.IntegerField(source='player.avatar_id', read_only=True)
     is_linked = serializers.SerializerMethodField()
     linked_email = serializers.SerializerMethodField()
+    senior_score = serializers.SerializerMethodField()
+    is_senior_candidate = serializers.SerializerMethodField()
+    days_in_club = serializers.SerializerMethodField()
 
     class Meta:
         model = ClubMember
         fields = [
             'id', 'club', 'player', 'player_name', 'player_tag', 
             'avatar_id', 'role', 'is_approved', 'is_active', 
-            'joined_at', 'left_at', 'is_linked', 'linked_email'
+            'joined_at', 'left_at', 'is_linked', 'linked_email',
+            'senior_score', 'is_senior_candidate', 'days_in_club'
         ]
         read_only_fields = ['id', 'joined_at', 'left_at']
 
     def get_is_linked(self, obj):
         auth_id = obj.player.supabase_auth_id or ''
         return auth_id.startswith('django-user-')
+
+    def get_senior_score(self, obj):
+        return getattr(obj, '_senior_score', None)
+
+    def get_is_senior_candidate(self, obj):
+        return getattr(obj, '_is_senior_candidate', False)
+
+    def get_days_in_club(self, obj):
+        return getattr(obj, '_days_in_club', None)
 
     def get_linked_email(self, obj):
         auth_id = obj.player.supabase_auth_id or ''
@@ -135,3 +148,23 @@ class ForumReplySerializer(serializers.ModelSerializer):
         if request and hasattr(request, 'player') and request.player:
             return obj.likes.filter(id=request.player.id).exists()
         return False
+
+class LinkRequestSerializer(serializers.ModelSerializer):
+    player_name = serializers.CharField(source='player.name', read_only=True)
+    player_tag = serializers.CharField(source='player.player_tag', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+    user_email = serializers.CharField(source='user.email', read_only=True)
+
+    class Meta:
+        model = LinkRequest
+        fields = [
+            'id', 'player', 'player_name', 'player_tag',
+            'user', 'username', 'user_email',
+            'club', 'status', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+class ClubConfigSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClubConfig
+        fields = ['max_senior_pct', 'weight_days', 'weight_ranked', 'weight_total', 'linkable_roles']

@@ -20,6 +20,13 @@ class Match(models.Model):
             models.Index(fields=['player', 'mode']),
             models.Index(fields=['player', 'my_brawler']),
         ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['player', 'api_match_id'],
+                name='unique_player_match',
+                condition=models.Q(api_match_id__isnull=False)
+            ),
+        ]
 
     def __str__(self):
         return f"Match {self.id} - {self.player.name} as {self.my_brawler.name if self.my_brawler else 'Unknown'} ({self.result})"

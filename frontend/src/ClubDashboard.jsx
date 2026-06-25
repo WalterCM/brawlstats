@@ -115,6 +115,36 @@ export default function ClubDashboard({
     return found ? found.image_url : null;
   };
 
+  // Club Config State
+  const [clubConfig, setClubConfig] = useState(null);
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  const loadClubConfig = async (clubId) => {
+    try {
+      const config = await api.fetchClubConfig(clubId);
+      setClubConfig(config);
+    } catch (err) {
+      console.error('Failed to load club config:', err);
+    }
+  };
+
+  const handleSaveConfig = async (e) => {
+    e.preventDefault();
+    if (!clubStatus.club || !clubConfig) return;
+    setSavingConfig(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await api.updateClubConfig(clubStatus.club.id, clubConfig);
+      setClubConfig(updated);
+      setSuccess('Configuración guardada.');
+    } catch (err) {
+      setError(err.message || 'Failed to save config.');
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
   // Forum create category form
   const [showNewCategoryForm, setShowNewCategoryForm] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -168,12 +198,14 @@ export default function ClubDashboard({
           loadThreads(catList[0].id);
         }
         loadClubStats(statusRes.club.id);
+        loadClubConfig(statusRes.club.id);
 
         // Load unlinked profiles for mapping if President/VP
         const isPres = statusRes.role === 'president';
         const isVice = statusRes.role === 'vice_president';
         if (isPres || isVice || me.is_admin) {
           await loadUnlinkedProfiles(statusRes.club.id);
+          await loadPendingLinkRequests(statusRes.club.id);
         }
       }
     } catch (err) {
@@ -235,7 +267,14 @@ export default function ClubDashboard({
     setSuccess('');
     try {
       const res = await api.syncClubMatches(clubStatus.club.id);
-      setSuccess(`Synced ${res.total_matches_synced} new matches across ${res.synced_players} members.`);
+      let msg = `Sincronizadas ${res.total_matches_synced} partidas de ${res.synced_players} miembros.`;
+      if (res.errors && res.errors.length > 0) {
+        const errList = res.errors.map(e => `${e.name}: ${e.error}`).join('; ');
+        msg += ` Errores: ${errList}`;
+        setError(msg);
+      } else {
+        setSuccess(msg);
+      }
       await loadClubStats(clubStatus.club.id);
     } catch (err) {
       setError(err.message || 'Failed to sync club matches.');
@@ -365,33 +404,60 @@ export default function ClubDashboard({
     }
   };
 
-  // Approve Member Request
-  const handleApproveMember = async (playerId) => {
-    setError('');
+  // Link Requests State
+  const [pendingLinkRequests, setPendingLinkRequests] = useState([]);
+  const [loadingLinkRequests, setLoadingLinkRequests] = useState(false);
+
+  const loadPendingLinkRequests = async (clubId) => {
+    const id = clubId || clubStatus.club?.id;
+    if (!id) return;
+    setLoadingLinkRequests(true);
     try {
-      await api.approveClubMember(clubStatus.club.id, playerId);
-      setSuccess('Member approved!');
-      await loadClubData();
+      const reqs = await api.fetchPendingLinkRequests(id);
+      setPendingLinkRequests(reqs);
     } catch (err) {
-      setError(err.message || 'Failed to approve member.');
+      console.error('Failed to load pending link requests:', err);
+    } finally {
+      setLoadingLinkRequests(false);
     }
   };
 
-  // Reject Request / Kick Member
-  const handleRemoveMember = async (playerId, name) => {
-    const isPending = !clubStatus.club.members.find(m => m.player === playerId)?.is_approved;
-    const confirmMsg = isPending 
-      ? `Reject join request from ${name}?` 
-      : `Are you sure you want to kick ${name} from the club?`;
-    if (!window.confirm(confirmMsg)) return;
-
+  const handleRequestLink = async (playerId) => {
+    if (!clubStatus.club) return;
     setError('');
+    setSuccess('');
     try {
-      await api.rejectOrRemoveClubMember(clubStatus.club.id, playerId);
-      setSuccess(isPending ? 'Request rejected.' : 'Member removed.');
+      const res = await api.requestLink(clubStatus.club.id, playerId);
+      setSuccess(res.message || 'Link request sent! The club admin will verify with you in the club chat.');
+    } catch (err) {
+      setError(err.message || 'Failed to request link.');
+    }
+  };
+
+  const handleApproveLinkRequest = async (requestId) => {
+    if (!clubStatus.club) return;
+    setError('');
+    setSuccess('');
+    try {
+      const res = await api.approveLinkRequest(clubStatus.club.id, requestId);
+      setSuccess(res.message || 'Link request approved!');
+      await loadPendingLinkRequests();
       await loadClubData();
     } catch (err) {
-      setError(err.message || 'Failed to remove member.');
+      setError(err.message || 'Failed to approve link request.');
+    }
+  };
+
+  const handleRejectLinkRequest = async (requestId) => {
+    if (!clubStatus.club) return;
+    setError('');
+    setSuccess('');
+    try {
+      await api.rejectLinkRequest(clubStatus.club.id, requestId);
+      setSuccess('Link request rejected.');
+      await loadPendingLinkRequests();
+    } catch (err) {
+      setError(err.message || 'Failed to reject link request.');
     }
   };
 
@@ -532,6 +598,11 @@ export default function ClubDashboard({
         <p>Loading Club Hub...</p>
       </div>
     );
+  }
+
+  // Link view bypasses club membership guards
+  if (view === 'link') {
+    return <LinkView clubStatus={clubStatus} me={me} setError={setError} setSuccess={setSuccess} />;
   }
 
   // Settings view specific guards
@@ -690,7 +761,6 @@ export default function ClubDashboard({
   // Case 3: APPROVED MEMBER of a club
   const club = clubStatus.club;
   const approvedMembers = club.members.filter(m => m.is_approved && m.is_active);
-  const pendingMembers = club.members.filter(m => !m.is_approved);
   const inactiveMembers = club.members.filter(m => m.is_approved && !m.is_active);
 
   return (
@@ -1077,11 +1147,22 @@ export default function ClubDashboard({
                       <div className="roster-tag">
                         {member.player_tag} • <span className="joined-date-meta" style={{ fontSize: '0.8rem', color: '#aaa' }}>Desde {new Date(member.joined_at).toLocaleDateString()}</span>
                       </div>
+                      {member.days_in_club !== null && member.days_in_club !== undefined && (
+                        <div className="roster-senior-metrics" style={{ fontSize: '0.8rem', color: '#aaa', marginTop: '3px' }}>
+                          📅 {member.days_in_club} días en el club
+                          {member.senior_score !== null && member.senior_score !== undefined && (
+                            <> • 🏆 Score: {member.senior_score}</>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span className={`role-badge ${member.role}`}>{member.role}</span>
-                      
-
+                      {member.is_senior_candidate && (
+                        <span className="senior-candidate-badge" style={{ fontSize: '0.7rem', background: 'rgba(255, 183, 0, 0.15)', color: '#ffb700', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(255, 183, 0, 0.3)', fontWeight: 'bold' }}>
+                          ⭐ Senior Candidate
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -1159,48 +1240,56 @@ export default function ClubDashboard({
             </div>
           </div>
 
-          {/* Pending Members List & Account Linking Panel */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            <div className="glass-panel club-panel-section">
-              <h2>📥 Pending Approval Requests</h2>
-              {pendingMembers.length === 0 ? (
-                <div className="empty-state">
-                  <p>No pending join requests.</p>
-                </div>
-              ) : (
-                <div className="roster-list">
-                  {pendingMembers.map(member => (
-                    <div key={member.id} className="roster-item">
-                      <div style={{ flex: 1 }}>
-                        <div className="roster-name">{member.player_name}</div>
-                        <div className="roster-tag">{member.player_tag}</div>
-                      </div>
-                      <div>
-                        {isAdmin ? (
-                          <div style={{ display: 'flex', gap: '6px' }}>
-                            <button 
-                              onClick={() => handleApproveMember(member.player)}
-                              className="btn btn-sm btn-primary"
-                            >
-                              Approve
-                            </button>
-                            <button 
-                              onClick={() => handleRemoveMember(member.player, member.player_name)}
-                              className="btn btn-sm btn-danger"
-                            >
-                              Reject
-                            </button>
+          {/* Link Requests Section (admin only) */}
+          {(isPresident || isVP || me?.is_admin) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              <div className="glass-panel club-panel-section">
+                <h2>📨 Solicitudes de Linkeo</h2>
+                {loadingLinkRequests ? (
+                  <div className="club-loading-container" style={{ minHeight: '80px' }}>
+                    <div className="spinner"></div>
+                    <p>Cargando solicitudes...</p>
+                  </div>
+                ) : pendingLinkRequests.length === 0 ? (
+                  <div className="empty-state">
+                    <p>No hay solicitudes de linkeo pendientes.</p>
+                  </div>
+                ) : (
+                  <div className="roster-list">
+                    {pendingLinkRequests.map(req => (
+                      <div key={req.id} className="roster-item">
+                        <div style={{ flex: 1 }}>
+                          <div className="roster-name">
+                            {req.player_name} 
+                            <span style={{ fontSize: '0.75rem', color: '#aaa', marginLeft: '8px' }}>
+                              quiere ser → {req.username}
+                            </span>
                           </div>
-                        ) : (
-                          <span className="pending-label">Pending</span>
-                        )}
+                          <div className="roster-tag">
+                            {req.player_tag || '#'} · {req.user_email}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button 
+                            onClick={() => handleApproveLinkRequest(req.id)}
+                            className="btn btn-sm btn-primary"
+                          >
+                            Aceptar
+                          </button>
+                          <button 
+                            onClick={() => handleRejectLinkRequest(req.id)}
+                            className="btn btn-sm btn-danger"
+                          >
+                            Rechazar
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
           )}
         </div>
@@ -1550,6 +1639,65 @@ export default function ClubDashboard({
                 Joined {new Date(club.members.find(m => m.player === me.id)?.joined_at).toLocaleDateString()}
               </div>
             </div>
+
+            {(isPresident || isVP || me?.is_admin) && clubConfig && (
+              <div style={{ borderTop: '1px solid var(--border-glass)', paddingTop: '20px', marginTop: '10px' }}>
+                <h3>🎯 Senior Criteria Config</h3>
+                <p style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '15px' }}>
+                  Configure the automatic senior candidate scoring. Members are ranked and the top X% become "senior candidates."
+                </p>
+                {clubStats?.senior_config && (
+                  <div style={{ fontSize: '0.85rem', background: 'rgba(255, 183, 0, 0.08)', border: '1px solid rgba(255, 183, 0, 0.2)', borderRadius: '8px', padding: '10px 14px', marginBottom: '15px' }}>
+                    📊 {clubStats.senior_config.current_seniors}/{clubStats.senior_config.max_seniors} seniors · {clubStats.senior_config.available_slots} cupos disponibles
+                  </div>
+                )}
+                <form onSubmit={handleSaveConfig} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div className="form-group">
+                    <label>Max Senior %</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={clubConfig.max_senior_pct}
+                      onChange={(e) => setClubConfig({ ...clubConfig, max_senior_pct: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Peso días en el club</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={clubConfig.weight_days}
+                      onChange={(e) => setClubConfig({ ...clubConfig, weight_days: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Peso partidas ranked</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={clubConfig.weight_ranked}
+                      onChange={(e) => setClubConfig({ ...clubConfig, weight_ranked: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Peso partidas totales</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      value={clubConfig.weight_total}
+                      onChange={(e) => setClubConfig({ ...clubConfig, weight_total: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={savingConfig}>
+                    {savingConfig ? 'Guardando...' : 'Guardar Configuración'}
+                  </button>
+                </form>
+              </div>
+            )}
             
             <div style={{ borderTop: '1px solid var(--border-glass)', paddingTop: '20px', marginTop: '10px' }}>
               <h3>Exit Club</h3>
@@ -1570,6 +1718,130 @@ export default function ClubDashboard({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function LinkView({ clubStatus, me, setError, setSuccess }) {
+  const [clubs, setClubs] = useState([]);
+  const [selectedClubId, setSelectedClubId] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const list = await api.fetchClubs();
+        setClubs(list);
+        if (list.length === 1) {
+          setSelectedClubId(list[0].id);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedClubId) return;
+    setLoading(true);
+    (async () => {
+      try {
+        const data = await api.fetchPublicMembers(selectedClubId);
+        setMembers(data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [selectedClubId]);
+
+  const handleLink = async (playerId) => {
+    if (!selectedClubId) return;
+    setSending(playerId);
+    try {
+      const res = await api.requestLink(selectedClubId, playerId);
+      setSuccess(res.message || 'Link request sent!');
+      setError('');
+      // update local state to reflect
+      setMembers(prev => prev.map(m => m.player_id === playerId ? { ...m, is_linkable: false } : m));
+    } catch (err) {
+      setError(err.message || 'Failed to request link.');
+      setSuccess('');
+    } finally {
+      setSending(null);
+    }
+  };
+
+  return (
+    <div className="club-page-wrapper">
+      <div className="glass-panel club-panel-section" style={{ maxWidth: '700px', margin: '0 auto' }}>
+        <h2>🔗 Vincular mi cuenta del club</h2>
+        <p className="subtitle">
+          Seleccioná tu cuenta del roster del club para vincularla con tu usuario web.
+          El administrador del club verificará la solicitud en el chat del club.
+        </p>
+
+        {clubs.length > 1 && (
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label>Club</label>
+            <select
+              value={selectedClubId || ''}
+              onChange={(e) => setSelectedClubId(Number(e.target.value))}
+              style={{ padding: '10px', borderRadius: '6px', background: '#1c1c1e', border: '1px solid #444', color: '#fff', width: '100%' }}
+            >
+              <option value="">-- Seleccionar Club --</option>
+              {clubs.map(c => (
+                <option key={c.id} value={c.id}>{c.name} ({c.tag})</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {loading && (
+          <div className="club-loading-container" style={{ minHeight: '100px' }}>
+            <div className="spinner"></div>
+            <p>Cargando miembros...</p>
+          </div>
+        )}
+
+        {!loading && selectedClubId && (
+          <div className="roster-list">
+            {members.length === 0 ? (
+              <div className="empty-state">
+                <p>No hay miembros disponibles para vincular en este club.</p>
+              </div>
+            ) : (
+              members.filter(m => m.is_linkable).map(m => (
+                <div key={m.player_id} className="roster-item">
+                  {m.avatar_id ? (
+                    <img src={`https://cdn.brawlify.com/profile-icons/regular/${m.avatar_id}.png`} alt="" className="roster-avatar" />
+                  ) : (
+                    <div className="roster-avatar-fallback">👤</div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <div className="roster-name">{m.name}</div>
+                    <div className="roster-tag">{m.tag}</div>
+                  </div>
+                  <div>
+                    <span className={`role-badge ${m.role}`} style={{ marginRight: '10px' }}>{m.role.replace('_', ' ')}</span>
+                    <button
+                      onClick={() => handleLink(m.player_id)}
+                      disabled={sending === m.player_id}
+                      className="btn btn-primary btn-sm"
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      {sending === m.player_id ? 'Enviando...' : '🙋‍♂️ Soy yo'}
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

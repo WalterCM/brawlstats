@@ -43,9 +43,6 @@ def ingest_player_matches(player):
         if not battle_time:
             continue
 
-        if Match.objects.filter(player=player, api_match_id=battle_time).exists():
-            continue
-
         event = item.get('event', {})
         map_name = event.get('map')
         if not map_name:
@@ -105,17 +102,21 @@ def ingest_player_matches(player):
         is_star_player = star_player_tag.replace('#', '').upper() == normalized_player_tag
 
         with transaction.atomic():
-            match = Match.objects.create(
+            match, created = Match.objects.get_or_create(
                 player=player,
-                map=db_map,
-                my_brawler=my_brawler,
-                mode=db_map.mode,
-                result=result,
-                draft_type=draft_type,
                 api_match_id=battle_time,
-                my_brawler_trophies=my_brawler_trophies,
-                is_star_player=is_star_player
+                defaults=dict(
+                    map=db_map,
+                    my_brawler=my_brawler,
+                    mode=db_map.mode,
+                    result=result,
+                    draft_type=draft_type,
+                    my_brawler_trophies=my_brawler_trophies,
+                    is_star_player=is_star_player,
+                )
             )
+            if not created:
+                continue
 
             order = 0
             def create_pick(player_data, team_name):

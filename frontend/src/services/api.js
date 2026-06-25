@@ -574,5 +574,86 @@ export const api = {
     });
     if (!res.ok) throw new Error('Failed to toggle like on reply');
     return res.json();
+  },
+
+  // LINK: Fetch public members (linkable profiles, no club membership required)
+  async fetchPublicMembers(clubId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/public_members/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch club members');
+    return res.json();
+  },
+
+  // LINK: Request to link a player to the logged-in user
+  async requestLink(clubId, playerId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/request_link/`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ player_id: playerId })
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to request link');
+    }
+    return res.json();
+  },
+
+  // LINK: Fetch pending link requests (admin only)
+  async fetchPendingLinkRequests(clubId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/pending_link_requests/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch pending link requests');
+    return res.json();
+  },
+
+  // LINK: Approve a link request (admin only)
+  async approveLinkRequest(clubId, requestId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/approve_link_request/${requestId}/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to approve link request');
+    }
+    return res.json();
+  },
+
+  // LINK: Reject a link request (admin only)
+  async rejectLinkRequest(clubId, requestId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/reject_link_request/${requestId}/`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to reject link request');
+    }
+    return res.json();
+  },
+
+  // CONFIG: Get club config
+  async fetchClubConfig(clubId) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/config/`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) throw new Error('Failed to fetch club config');
+    return res.json();
+  },
+
+  // CONFIG: Update club config
+  async updateClubConfig(clubId, payload) {
+    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/config/`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'Failed to update club config');
+    }
+    return res.json();
   }
 };
