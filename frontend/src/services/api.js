@@ -394,20 +394,6 @@ export const api = {
     return res.json();
   },
 
-  // Change member role
-  async changeClubMemberRole(clubId, playerId, role) {
-    const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/change_member_role/`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify({ player_id: playerId, role: role })
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || 'Failed to change role');
-    }
-    return res.json();
-  },
-
   // Sync roster with official Brawl Stars API
   async syncClubRoster(clubId) {
     const res = await fetch(`${API_BASE_URL}/clubs/${clubId}/sync_roster/`, {

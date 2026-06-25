@@ -285,46 +285,6 @@ class ClubViewSet(viewsets.ModelViewSet):
         return response.Response({'message': 'Member request rejected or member removed.'})
 
     @action(detail=True, methods=['post'])
-    def change_member_role(self, request, pk=None):
-        club = self.get_object()
-        player = request.player
-
-        # Check permissions (Only President can change roles)
-        try:
-            req_membership = ClubMember.objects.get(club=club, player=player)
-            if req_membership.role != 'president' or not req_membership.is_approved:
-                return response.Response({'error': 'Only the President can change member roles.'}, status=status.HTTP_403_FORBIDDEN)
-        except ClubMember.DoesNotExist:
-            return response.Response({'error': 'Permission denied.'}, status=status.HTTP_403_FORBIDDEN)
-
-        player_id = request.data.get('player_id')
-        new_role = request.data.get('role')
-
-        if not player_id or not new_role:
-            return response.Response({'error': 'player_id and role are required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if new_role not in ['president', 'vice_president', 'senior', 'member']:
-            return response.Response({'error': 'Invalid role.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            target_membership = ClubMember.objects.get(club=club, player_id=player_id)
-        except ClubMember.DoesNotExist:
-            return response.Response({'error': 'Member not found.'}, status=status.HTTP_404_NOT_FOUND)
-
-        with transaction.atomic():
-            if new_role == 'president':
-                # Swap leadership: current president becomes a vice president (or member), target becomes president
-                req_membership.role = 'vice_president'
-                req_membership.save()
-                target_membership.role = 'president'
-                target_membership.save()
-            else:
-                target_membership.role = new_role
-                target_membership.save()
-
-        return response.Response({'message': 'Role updated successfully.'})
-
-    @action(detail=True, methods=['post'])
     def sync_roster(self, request, pk=None):
         club = self.get_object()
         player = request.player

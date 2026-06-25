@@ -395,18 +395,6 @@ export default function ClubDashboard({
     }
   };
 
-  // Promote / Demote Role
-  const handleChangeRole = async (playerId, newRole) => {
-    setError('');
-    try {
-      await api.changeClubMemberRole(clubStatus.club.id, playerId, newRole);
-      setSuccess('Role updated successfully.');
-      await loadClubData();
-    } catch (err) {
-      setError(err.message || 'Failed to change role.');
-    }
-  };
-
   // Post Thread
   const handleCreateThread = async (e) => {
     e.preventDefault();
@@ -1093,48 +1081,7 @@ export default function ClubDashboard({
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <span className={`role-badge ${member.role}`}>{member.role}</span>
                       
-                      {/* President Controls */}
-                      {isPresident && member.player !== me.id && (
-                        <div className="admin-actions" onClick={(e) => e.stopPropagation()}>
-                          <select 
-                            value={member.role} 
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              handleChangeRole(member.player, e.target.value);
-                            }}
-                            className="role-select"
-                          >
-                            <option value="president">Transfer President</option>
-                            <option value="vice_president">Vice President</option>
-                            <option value="senior">Senior</option>
-                            <option value="member">Member</option>
-                          </select>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleRemoveMember(member.player, member.player_name);
-                            }}
-                            className="btn btn-sm btn-danger-text"
-                            title="Kick Member"
-                          >
-                            Kick
-                          </button>
-                        </div>
-                      )}
 
-                      {/* Vice President Controls (Can only kick seniors and members) */}
-                      {isVP && member.player !== me.id && member.role !== 'president' && member.role !== 'vice_president' && (
-                        <button 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveMember(member.player, member.player_name);
-                          }}
-                          className="btn btn-sm btn-danger-text"
-                          title="Kick Member"
-                        >
-                          Kick
-                        </button>
-                      )}
                     </div>
                   </div>
 

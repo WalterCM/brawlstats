@@ -399,24 +399,6 @@
   border: 1px solid var(--border-glass);
 }
 
-.admin-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.role-select {
-  background: rgba(0,0,0,0.4);
-  color: #fff;
-  border: 1px solid var(--border-glass);
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 0.8rem;
-  outline: none;
-  font-weight: 600;
-  cursor: pointer;
-}
-
 .btn-danger-text {
   color: var(--color-enemy);
   background: none;
