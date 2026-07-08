@@ -6,6 +6,8 @@ class Player(models.Model):
     player_tag = models.CharField(max_length=50, blank=True, null=True)
     avatar_id = models.IntegerField(blank=True, null=True)
     min_normal_trophies = models.IntegerField(default=750)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    sync_interval_h = models.FloatField(default=72.0)
 
     def __str__(self):
         return f"{self.name} ({self.supabase_auth_id[:8]})"

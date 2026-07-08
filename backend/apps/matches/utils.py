@@ -29,6 +29,7 @@ def ingest_player_matches(player):
         return 0
 
     synced_count = 0
+    new_ranked_ids = []
     normalized_player_tag = player_tag.replace('#', '').upper()
     allowed_modes = {'gemgrab', 'brawlball', 'heist', 'hotzone', 'knockout', 'bounty'}
 
@@ -142,5 +143,52 @@ def ingest_player_matches(player):
                 create_pick(p, 'enemy')
 
         synced_count += 1
+        if match.draft_type == 'ranked':
+            new_ranked_ids.append(match.id)
+
+    # Group newly created ranked matches into series by mode + time proximity
+    if len(new_ranked_ids) >= 2:
+        from datetime import datetime
+        ranked_matches = Match.objects.filter(id__in=new_ranked_ids).order_by('api_match_id')
+        groups = []
+        current = []
+        for m in ranked_matches:
+            if not current:
+                current = [m]
+            else:
+                prev_bt = datetime.strptime(current[-1].api_match_id[:15], '%Y%m%dT%H%M%S')
+                curr_bt = datetime.strptime(m.api_match_id[:15], '%Y%m%dT%H%M%S')
+                gap = (curr_bt - prev_bt).total_seconds()
+                if gap < 300 and m.mode == current[-1].mode:
+                    current.append(m)
+                else:
+                    if len(current) >= 2:
+                        groups.append(current)
+                    current = [m]
+        if len(current) >= 2:
+            groups.append(current)
+        for group in groups:
+            series_id = group[0].api_match_id
+            Match.objects.filter(id__in=[g.id for g in group]).update(series_api_match_id=series_id)
+
+    # Update adaptive sync interval
+    from django.utils import timezone
+    now = timezone.now()
+    last = player.last_sync_at
+    if last:
+        hours_since = max((now - last).total_seconds() / 3600, 0.01)
+    else:
+        hours_since = player.sync_interval_h
+
+    if synced_count > 0:
+        rate = synced_count / hours_since
+        new_interval = 15.0 / rate
+    else:
+        new_interval = player.sync_interval_h * 1.5
+
+    new_interval = max(24, min(720, new_interval))
+    player.last_sync_at = now
+    player.sync_interval_h = new_interval
+    player.save(update_fields=['last_sync_at', 'sync_interval_h'])
 
     return synced_count

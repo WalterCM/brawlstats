@@ -323,3 +323,23 @@ class ClubForumTests(APITestCase):
         response = self.client.get('/api/matches/', {'player_id': player2.id})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
+
+    def test_sync_all_matches(self):
+        # Setup: Club with player1 and player2
+        club = Club.objects.create(name='Brawl Champions', tag='#CHAMP123')
+        ClubMember.objects.create(club=club, player=self.player1, role='president', is_approved=True)
+        ClubMember.objects.create(club=club, player=self.player2, role='member', is_approved=True)
+
+        # Mock ingest_player_matches
+        from unittest.mock import patch
+        with patch('apps.matches.utils.ingest_player_matches') as mock_ingest:
+            mock_ingest.return_value = 5 # Return 5 synced matches
+
+            # Player 1 (president) requests sync all matches
+            response = self.client.post(f'/api/clubs/{club.id}/sync_all_matches/')
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
+            self.assertEqual(response.data['synced_players'], 2)
+            self.assertEqual(response.data['total_matches_synced'], 10)
+            self.assertEqual(response.data['total_checked'], 2)
+            self.assertEqual(len(response.data['errors']), 0)
+

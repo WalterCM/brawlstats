@@ -11,6 +11,8 @@ class ClubMemberSerializer(serializers.ModelSerializer):
     senior_score = serializers.SerializerMethodField()
     is_senior_candidate = serializers.SerializerMethodField()
     days_in_club = serializers.SerializerMethodField()
+    last_sync_at = serializers.SerializerMethodField()
+    sync_interval_h = serializers.SerializerMethodField()
 
     class Meta:
         model = ClubMember
@@ -18,7 +20,8 @@ class ClubMemberSerializer(serializers.ModelSerializer):
             'id', 'club', 'player', 'player_name', 'player_tag', 
             'avatar_id', 'role', 'is_approved', 'is_active', 
             'joined_at', 'left_at', 'is_linked', 'linked_email',
-            'senior_score', 'is_senior_candidate', 'days_in_club'
+            'senior_score', 'is_senior_candidate', 'days_in_club',
+            'last_sync_at', 'sync_interval_h'
         ]
         read_only_fields = ['id', 'joined_at', 'left_at']
 
@@ -34,6 +37,13 @@ class ClubMemberSerializer(serializers.ModelSerializer):
 
     def get_days_in_club(self, obj):
         return getattr(obj, '_days_in_club', None)
+
+    def get_last_sync_at(self, obj):
+        ls = obj.player.last_sync_at
+        return ls.isoformat() if ls else None
+
+    def get_sync_interval_h(self, obj):
+        return obj.player.sync_interval_h
 
     def get_linked_email(self, obj):
         auth_id = obj.player.supabase_auth_id or ''

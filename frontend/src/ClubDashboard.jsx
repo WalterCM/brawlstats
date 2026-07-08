@@ -267,7 +267,8 @@ export default function ClubDashboard({
     setSuccess('');
     try {
       const res = await api.syncClubMatches(clubStatus.club.id);
-      let msg = `Sincronizadas ${res.total_matches_synced} partidas de ${res.synced_players} miembros.`;
+      const totalChecked = res.total_checked || (res.synced_players + (res.errors ? res.errors.length : 0));
+      let msg = `Se revisaron ${totalChecked} miembros en total. Sincronizadas ${res.total_matches_synced} partidas de ${res.synced_players} miembros con actividad nueva.`;
       if (res.errors && res.errors.length > 0) {
         const errList = res.errors.map(e => `${e.name}: ${e.error}`).join('; ');
         msg += ` Errores: ${errList}`;
@@ -1153,6 +1154,11 @@ export default function ClubDashboard({
                           {member.senior_score !== null && member.senior_score !== undefined && (
                             <> • 🏆 Score: {member.senior_score}</>
                           )}
+                        </div>
+                      )}
+                      {member.last_sync_at && (
+                        <div className="roster-sync-info" style={{ fontSize: '0.75rem', color: '#888', marginTop: '2px' }}>
+                          🔄 Sync: {new Date(member.last_sync_at).toLocaleDateString()} • próx en ~{Math.round(member.sync_interval_h)}h
                         </div>
                       )}
                     </div>

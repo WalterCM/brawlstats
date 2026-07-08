@@ -519,12 +519,14 @@ class ClubViewSet(viewsets.ModelViewSet):
 
         synced_players = 0
         total_matches = 0
+        total_checked = 0
         errors = []
 
         for member in members:
             p = member.player
             if not p.player_tag:
                 continue
+            total_checked += 1
             try:
                 count = ingest_player_matches(p)
                 if count > 0:
@@ -538,6 +540,7 @@ class ClubViewSet(viewsets.ModelViewSet):
         return response.Response({
             'synced_players': synced_players,
             'total_matches_synced': total_matches,
+            'total_checked': total_checked,
             'errors': errors
         })
 
