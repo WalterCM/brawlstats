@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://YOUR_BACKEND_SERVICE_NAME.onrender.com/api/:path*"
+      "destination": "https://brawlstats-mdkn.onrender.com/api/:path*"
     },
     {
       "source": "/((?!api/).*)",
