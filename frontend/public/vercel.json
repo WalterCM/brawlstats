@@ -1,11 +1,18 @@
 {
+  "redirects": [
+    {
+      "source": "/test-redirect",
+      "destination": "https://google.com",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
       "destination": "https://brawlstats-mdkn.onrender.com/api/:path*"
     },
     {
-      "source": "/:path((?!api/).*)",
+      "source": "/:path*",
       "destination": "/index.html"
     }
   ]
