@@ -8,11 +8,11 @@
   ],
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://brawlstats-mdkn.onrender.com/api/:path*"
+      "source": "/api/(.*)",
+      "destination": "https://brawlstats-mdkn.onrender.com/api/$1"
     },
     {
-      "source": "/:path*",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
