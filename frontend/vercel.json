@@ -5,7 +5,7 @@
       "destination": "https://brawlstats-mdkn.onrender.com/api/:path*"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/:path((?!api/).*)",
       "destination": "/index.html"
     }
   ]
