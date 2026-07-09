@@ -535,7 +535,7 @@ class ClubViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 errors.append({'player_id': p.id, 'name': p.name, 'error': str(e)})
             import time
-            time.sleep(1.5)
+            time.sleep(0.1)
 
         return response.Response({
             'synced_players': synced_players,
