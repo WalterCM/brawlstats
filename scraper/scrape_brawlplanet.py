@@ -4,12 +4,11 @@ scrape_brawlplanet.py
 Scraper local de BrawlPlanet para extraer estadísticas de brawlers por mapa.
 No requiere browser — usa curl-cffi que emula el TLS fingerprint de Chrome.
 
-Extrae las estadísticas competitivas del modo Ranked directamente desde
-https://www.brawlplanet.com/powerleague.
+Extrae las estadísticas competitivas del modo Ranked directamente desde la API/GCS de BrawlPlanet.
 
 Genera dos archivos JSON que alimentan el pipeline de Django:
-  - ../backend/apps/core/management/commands/maps_tiered_stats.json
-  - ../backend/apps/core/management/commands/brawlers_global_stats.json
+  - ../backend/apps/core/management/commands/maps_tiered_stats_planet.json
+  - ../backend/apps/core/management/commands/brawlers_global_stats_planet.json
 
 Uso:
     pip install -r requirements.txt
@@ -20,7 +19,6 @@ Uso:
 
 from html import unescape as html_unescape
 import json
-import re
 import sys
 import argparse
 from collections import defaultdict
@@ -33,37 +31,8 @@ from curl_cffi import requests as cffi_requests
 # Configuración
 # ---------------------------------------------------------------------------
 
-# Mapas del ranked pool actual (slug BrawlPlanet → nombre canónico del proyecto)
-RANKED_MAP_POOL = {
-    "shootingstar_bounty":    "Shooting Star",
-    "dryseason_bounty":       "Dry Season",
-    "layercake_bounty":       "Layer Cake",
-    "hideout_bounty":         "Hideout",
-    "doubleswoosh_gemgrab":   "Double Swoosh",
-    "gemfort_gemgrab":        "Gem Fort",
-    "hardrockmine_gemgrab":   "Hard Rock Mine",
-    "undermine_gemgrab":      "Undermine",
-    "bridgetoofar_heist":     "Bridge Too Far",
-    "hotpotato_heist":        "Hot Potato",
-    "kaboomcanyon_heist":     "Kaboom Canyon",
-    "safezone_heist":         "Safe Zone",
-    "centerstage_brawlball":  "Center Stage",
-    "pinballdreams_brawlball": "Pinball Dreams",
-    "sneakyfields_brawlball": "Sneaky Fields",
-    "tripledribble_brawlball": "Triple Dribble",
-    "duelingbeetles_hotzone": "Dueling Beetles",
-    "openbusiness_hotzone":   "Open Business",
-    "parallelplays_hotzone":  "Parallel Plays",
-    "ringoffire_hotzone":     "Ring of Fire",
-    "bellesrock_knockout":    "Belles Rock",
-    "flaringphoenix_knockout": "Flaring Phoenix",
-    "flowingsprings_knockout": "Flowing Springs",
-    "goldarmgulch_knockout":  "Goldarm Gulch",
-    "newhorizons_knockout":   "New Horizons",
-    "outintheopen_knockout":  "Out in the Open",
-}
-
 POWERLEAGUE_URL = "https://www.brawlplanet.com/powerleague"
+GCS_URL = "https://storage.googleapis.com/brawlanalyzer-public/pl-results.json.gz"
 TROPHY_RANGE = "Diamond I+"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -108,36 +77,13 @@ def assign_category(win_rate: float, pick_rate: float, rank_in_map: int, total: 
 
 
 # ---------------------------------------------------------------------------
-# Parser de Mapas desde el HTML de PowerLeague
+# Parser de Mapas desde el JSON de PowerLeague
 # ---------------------------------------------------------------------------
 
-def parse_map_from_powerleague(html: str, map_slug: str, canonical_name: str) -> dict | None:
-    match = re.search(r'\\\"' + map_slug + r'\\\":', html)
-    if not match:
-        return None
-    
-    start = match.end()
-    brace_count = 0
-    end = 0
-    chunk = html[start:start+150000]
-    for i, char in enumerate(chunk):
-        if char == '{':
-            brace_count += 1
-        elif char == '}':
-            brace_count -= 1
-            if brace_count == 0:
-                end = i + 1
-                break
-                
-    if end == 0:
-        return None
-        
-    map_str = chunk[:end]
-    map_str_clean = map_str.replace('\\"', '"').replace('\\\\', '\\')
-    
+def parse_map_from_powerleague_json(map_slug: str, map_json: dict) -> dict | None:
     try:
-        map_json = json.loads(map_str_clean)
         raw_brawlers = map_json.get("individual", [])
+        canonical_name = map_json.get("map", map_slug)
         
         stats = []
         for i, b in enumerate(raw_brawlers):
@@ -212,43 +158,39 @@ def compute_global_stats(maps_data: list[dict]) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 def main(dry_run: bool = False):
-    slugs = list(RANKED_MAP_POOL.items())
-    if dry_run:
-        slugs = slugs[:1]
-
-    mode = "DRY-RUN (1 mapa)" if dry_run else f"{len(slugs)} mapas"
-
     print(f"\n{'='*60}")
-    print(f"  BrawlPlanet Ranked Scraper — Modo: {mode}")
-    print(f"  Fuente: {POWERLEAGUE_URL}")
+    print(f"  BrawlPlanet Ranked Scraper (Direct GCS Ingestion)")
+    print(f"  Fuente: {GCS_URL}")
     print(f"  Salida: {OUTPUT_DIR.resolve()}")
     print(f"{'='*60}\n")
 
     session = cffi_requests.Session(impersonate="chrome124")
 
-    print("⏳ Descargando página competitiva de Ranked...")
+    print("⏳ Descargando estadísticas competitivas de Ranked desde GCS...")
     try:
-        resp = session.get(POWERLEAGUE_URL, timeout=25)
+        resp = session.get(GCS_URL, timeout=25)
         if resp.status_code != 200:
-            print(f"[ERROR] HTTP {resp.status_code} al descargar {POWERLEAGUE_URL}")
+            print(f"[ERROR] HTTP {resp.status_code} al descargar {GCS_URL}")
             sys.exit(1)
-        print(f"✓ Descarga completada ({len(resp.text)} caracteres)\n")
+        print(f"✓ Descarga completada ({len(resp.content)} bytes)\n")
+        data = resp.json()
     except Exception as e:
-        print(f"[ERROR] Falló la descarga de {POWERLEAGUE_URL}: {e}")
+        print(f"[ERROR] Falló la descarga de {GCS_URL}: {e}")
         sys.exit(1)
 
     maps_data = []
-    failed_maps = []
+    map_keys = list(data.keys())
+    if dry_run:
+        map_keys = map_keys[:1]
 
-    for i, (slug, canonical_name) in enumerate(slugs, 1):
-        print(f"[{i:02d}/{len(slugs):02d}] Procesando {canonical_name} ({slug})...")
-        result = parse_map_from_powerleague(resp.text, slug, canonical_name)
-
+    for i, map_slug in enumerate(map_keys, 1):
+        map_json = data[map_slug]
+        canonical_name = map_json.get("map", map_slug)
+        print(f"[{i:02d}/{len(map_keys):02d}] Procesando {canonical_name} ({map_slug})...")
+        
+        result = parse_map_from_powerleague_json(map_slug, map_json)
         if result:
             maps_data.append(result)
-        else:
-            print(f"  [ERROR] No se encontraron estadísticas para {canonical_name} ({slug}) en la página de Ranked.")
-            failed_maps.append(slug)
 
     # ---------------------------------------------------------------------------
     # Escribir archivos de salida
@@ -275,15 +217,10 @@ def main(dry_run: bool = False):
     total_entries = sum(len(m["stats"]) for m in maps_data)
     print(f"\n{'='*60}")
     print(f"  RESUMEN")
-    print(f"  Mapas procesados: {len(maps_data)}/{len(slugs)}")
-    if failed_maps:
-        print(f"  Mapas fallidos:   {', '.join(failed_maps)}")
+    print(f"  Mapas procesados: {len(maps_data)}/{len(map_keys)}")
     print(f"  Entradas totales: {total_entries}")
     print(f"  Brawlers únicos:  {len(global_stats)}")
     print(f"{'='*60}\n")
-
-    if failed_maps:
-        print(f"[WARN] {len(failed_maps)} mapas no se encontraron.")
 
 
 if __name__ == "__main__":
